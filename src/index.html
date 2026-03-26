@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: file:; script-src 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Postrix by Solvix</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Pantalla activación -->
+  <div id="view-activation" class="view view-activation hidden">
+    <div class="activation-card card-elevated">
+      <div class="brand-logo">POSTRIX</div>
+      <p class="brand-sub title-by" data-i18n="activation_sub">by Solvix</p>
+      <p class="activation-welcome" data-i18n="activation_welcome">Bienvenido a Postrix 👋</p>
+      <p class="muted activation-desc" data-i18n="activation_desc">Ingresa la clave que recibiste en tu correo electrónico al momento de tu compra.</p>
+      <label class="field-label" data-i18n="label_license">Clave de licencia</label>
+      <input type="text" id="license-input" class="input" data-i18n-placeholder="license_placeholder" placeholder="Ej: XXXX-XXXX-XXXX-XXXX" autocomplete="off" />
+      <button type="button" id="btn-activate" class="btn btn-primary btn-block btn-activate">
+        <span class="btn-activate-inner">
+          <span class="btn-label" data-i18n="btn_activate">Activar licencia</span>
+          <span class="btn-spinner" aria-hidden="true"></span>
+        </span>
+      </button>
+      <p id="activation-msg" class="msg msg-activation" role="alert"></p>
+      <p class="activation-help muted">
+        <span data-i18n="activation_help_before">¿No encuentras tu clave? Escríbenos a</span>
+        <a href="mailto:soporte@solvix.mx" class="link-help">soporte@solvix.mx</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="view-dashboard" class="view view-dashboard hidden">
+    <header class="app-header">
+      <div class="header-brand">
+        <span class="logo-text">Postrix</span>
+        <span class="logo-by">by Solvix</span>
+      </div>
+      <div class="header-center">
+        <div id="bot-status-pill" class="status-pill status-pill--stopped">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div class="status-pill-texts">
+            <span id="bot-status-text" class="status-pill-title">Detenido</span>
+            <span id="bot-status-sub" class="status-pill-sub"></span>
+          </div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btn-lang" class="btn btn-ghost" type="button">ES / EN</button>
+        <button id="btn-settings-header" class="btn btn-ghost" type="button" data-i18n="btn_settings">Ajustes</button>
+      </div>
+    </header>
+
+    <div id="update-banner" class="update-banner hidden">
+      <span id="update-banner-text"></span>
+      <button id="update-banner-link" class="btn btn-sm btn-accent" type="button" data-i18n="btn_update_pay">Pagar update</button>
+    </div>
+
+    <div class="layout">
+      <nav class="tabs-nav">
+        <button class="tab-btn active" data-tab="campaign" data-i18n="tab_campaign">Mi Campaña</button>
+        <button class="tab-btn" data-tab="groups" data-i18n="tab_groups">Mis Grupos</button>
+        <button class="tab-btn" data-tab="content" data-i18n="tab_content">Mi Publicación</button>
+        <button class="tab-btn" data-tab="history" data-i18n="tab_history">Historial</button>
+        <button class="tab-btn" data-tab="settings" data-i18n="tab_config">Configuración</button>
+      </nav>
+
+      <main class="tab-panels">
+        <!-- CAMPAÑA — centro de control -->
+        <section id="tab-campaign" class="tab-panel active">
+          <div class="panel-intro campaign-head">
+            <h2 data-i18n="campaign_title">Mi Campaña</h2>
+            <p class="muted campaign-head-sub" data-i18n="campaign_head_sub">Controla tu publicación en un solo lugar</p>
+          </div>
+
+          <div id="campaign-welcome" class="welcome-card card-elevated hidden">
+            <div class="welcome-card-inner">
+              <p class="welcome-title" data-i18n="welcome_title">🚀 ¿Listo para publicar?</p>
+              <p class="muted welcome-sub" data-i18n="welcome_sub">Configura tu campaña en 3 pasos:</p>
+              <ul class="welcome-steps">
+                <li data-i18n="welcome_step1">✓ 1. Agrega tus grupos</li>
+                <li data-i18n="welcome_step2">✓ 2. Sube tu publicación</li>
+                <li data-i18n="welcome_step3">✓ 3. Presiona INICIAR</li>
+              </ul>
+              <div class="welcome-actions">
+                <button type="button" id="btn-welcome-groups" class="btn btn-secondary" data-i18n="btn_go_groups">Ir a Grupos</button>
+                <button type="button" id="btn-welcome-content" class="btn btn-secondary" data-i18n="btn_go_content">Ir a Contenido</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Alerta restricción Facebook (24 h) -->
+          <div id="restriction-alert" class="restriction-card hidden" role="alert">
+            <span class="restriction-card-emoji" aria-hidden="true">🚨</span>
+            <div class="restriction-card-body">
+              <strong data-i18n="restriction_title">Facebook detectó actividad inusual</strong>
+              <p data-i18n="restriction_body">Tu bot está pausado automáticamente por 24 horas para proteger tu cuenta.</p>
+              <p id="restriction-timer" class="restriction-timer">Reactivación en: —</p>
+            </div>
+          </div>
+
+          <!-- 1. Configuración rápida (sesión) -->
+          <div class="campaign-quick card-elevated">
+            <p class="campaign-section-label" data-i18n="cq_section_title">Configuración rápida</p>
+            <div class="campaign-quick-block">
+              <p class="campaign-quick-label" data-i18n="cq_interval">¿Cada cuánto publicar?</p>
+              <div class="pick-row" id="cq-interval-picks" role="group">
+                <button type="button" class="pick-chip" data-cq="interval" data-value="1">1 <span data-i18n="cq_hour_short">h</span></button>
+                <button type="button" class="pick-chip" data-cq="interval" data-value="2">2 <span data-i18n="cq_hour_short">h</span></button>
+                <button type="button" class="pick-chip" data-cq="interval" data-value="3">3 <span data-i18n="cq_hour_short">h</span></button>
+                <button type="button" class="pick-chip" data-cq="interval" data-value="4">4 <span data-i18n="cq_hour_short">h</span></button>
+              </div>
+            </div>
+            <div class="campaign-quick-block">
+              <label class="campaign-quick-label" for="cq-hour-end" data-i18n="cq_until">¿Hasta qué hora publicar hoy?</label>
+              <input type="time" id="cq-hour-end" class="input cq-time" value="19:00" />
+            </div>
+            <div class="campaign-quick-block">
+              <p class="campaign-quick-label" data-i18n="cq_round">¿En cuántos grupos por ronda?</p>
+              <div class="pick-row" id="cq-groups-picks" role="group">
+                <button type="button" class="pick-chip active" data-cq="groups" data-value="20">20</button>
+                <button type="button" class="pick-chip" data-cq="groups" data-value="30">30</button>
+                <button type="button" class="pick-chip" data-cq="groups" data-value="40">40</button>
+                <button type="button" class="pick-chip" data-cq="groups" data-value="60">60</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Bot detenido: inicio + requisitos -->
+          <div id="campaign-panel-stopped" class="campaign-main card-elevated">
+            <button id="btn-bot-start" type="button" class="btn btn-success btn-campaign-hero" data-i18n="btn_start_now">▶ INICIAR PUBLICACIÓN AHORA</button>
+            <p id="campaign-ready-ready" class="campaign-all-ready hidden" data-i18n="checklist_all_ready">🚀 ¡Todo listo! Puedes iniciar</p>
+            <ul class="campaign-ready-list" id="campaign-ready-summary" aria-live="polite"></ul>
+          </div>
+
+          <!-- 2b. Bot en marcha -->
+          <div id="campaign-panel-active" class="campaign-main card-elevated hidden">
+            <div id="campaign-active-title" class="campaign-active-title">🟢 <span data-i18n="cap_posting">Bot publicando…</span></div>
+            <p id="campaign-active-detail" class="campaign-active-detail muted"></p>
+            <div id="campaign-round-progress-wrap" class="campaign-round-progress-wrap">
+              <div class="campaign-round-progress-outer">
+                <div id="campaign-round-progress-bar" class="campaign-round-progress-bar" style="width: 0%"></div>
+              </div>
+            </div>
+            <div class="campaign-active-actions">
+              <button id="btn-bot-resume" type="button" class="btn btn-success btn-lg hidden" data-i18n="btn_resume">▶ REANUDAR</button>
+              <button id="btn-bot-pause" type="button" class="btn btn-warn btn-lg" data-i18n="btn_pause">⏸ PAUSAR</button>
+              <button id="btn-bot-stop" type="button" class="btn btn-danger btn-lg" data-i18n="btn_stop">⏹ DETENER</button>
+            </div>
+          </div>
+
+          <!-- 3. Actividad en tiempo real -->
+          <div class="log-box campaign-log-box card-elevated">
+            <div class="log-head" data-i18n="log_live">Actividad en tiempo real:</div>
+            <div id="live-log" class="log-body campaign-log-body"></div>
+          </div>
+
+          <!-- 4. Stats hoy -->
+          <div class="stats-grid campaign-stats-grid">
+            <div class="stat-card stat-card-compact"><span id="stat-line-posts" class="stat-line"></span></div>
+            <div class="stat-card stat-card-compact"><span id="stat-line-groups-reached" class="stat-line"></span></div>
+            <div class="stat-card stat-card-compact"><span id="stat-line-next" class="stat-line"></span></div>
+            <div class="stat-card stat-card-compact"><span id="stat-line-rate" class="stat-line"></span></div>
+          </div>
+        </section>
+
+        <!-- GRUPOS -->
+        <section id="tab-groups" class="tab-panel">
+          <div class="panel-intro">
+            <h2 data-i18n="groups_title">Mis Grupos de Facebook</h2>
+            <p class="panel-subtitle muted" data-i18n="groups_subtitle">Agrega los grupos donde quieres publicar</p>
+          </div>
+
+          <div class="info-card card-elevated">
+            <p class="info-card-title" data-i18n="groups_how_title">¿Cómo agregar grupos?</p>
+            <p class="muted info-card-line" data-i18n="groups_how_opt1">Opción 1: Busca por tema 🔍</p>
+            <p class="muted info-card-line" data-i18n="groups_how_opt2">Opción 2: Pega el link del grupo 🔗</p>
+          </div>
+
+          <div class="row-btns groups-main-actions">
+            <button id="btn-search-groups" class="btn btn-primary btn-lg" type="button" data-i18n="btn_search_groups_big">🔍 Buscar grupos por tema</button>
+            <button id="btn-focus-links" class="btn btn-secondary btn-lg" type="button" data-i18n="btn_add_by_link">🔗 Agregar grupo por link</button>
+          </div>
+
+          <label class="field-label" data-i18n="label_paste_links">Pega aquí el link del grupo</label>
+          <textarea id="groups-urls" class="textarea" rows="6" data-i18n-placeholder="placeholder_group_urls" placeholder=""></textarea>
+          <div class="row-btns row-btns-secondary">
+            <button id="btn-extract-ids" class="btn btn-primary" type="button" data-i18n="btn_extract">Agregar a la lista</button>
+            <button id="btn-import-txt" class="btn btn-ghost" type="button" data-i18n="btn_import">Importar .txt</button>
+            <button id="btn-export-txt" class="btn btn-ghost" type="button" data-i18n="btn_export">Exportar lista</button>
+          </div>
+
+          <p class="groups-counter-line"><span data-i18n="groups_total_line">Tienes</span> <strong id="groups-count">0</strong> <span data-i18n="groups_total_of">grupos · Máximo</span> 80</p>
+          <div class="groups-progress-outer" aria-hidden="true">
+            <div id="groups-progress-bar" class="groups-progress-bar" style="width: 0%"></div>
+          </div>
+
+          <div id="groups-list-head" class="groups-list-head hidden">
+            <span data-i18n="col_group_name">Nombre</span>
+            <span data-i18n="col_members_col">Miembros</span>
+            <span data-i18n="col_status">Estado</span>
+            <span aria-hidden="true"></span>
+          </div>
+          <div id="groups-list" class="groups-list"></div>
+        </section>
+
+        <!-- CONTENIDO -->
+        <section id="tab-content" class="tab-panel">
+          <div class="panel-intro">
+            <h2 data-i18n="content_title">Mi Publicación</h2>
+            <p class="panel-subtitle muted" data-i18n="content_subtitle">Postrix rotará entre tus versiones para que no parezca repetitivo</p>
+          </div>
+          <p class="content-lead muted" data-i18n="content_lead">Puedes tener hasta 4 versiones diferentes de tu publicación. El bot las alternará automáticamente para mayor efectividad.</p>
+          <div id="content-slots" class="content-slots"></div>
+          <p class="muted"><span data-i18n="last_slot">Última versión usada</span>: <span id="last-slot">—</span></p>
+
+          <!-- Vista previa estilo publicación en grupo (actualización en vivo) -->
+          <div id="fb-preview-wrap" class="fb-preview-wrap">
+            <p class="fb-preview-heading" data-i18n="preview_heading">👁 Vista previa de tu publicación</p>
+            <p class="muted fb-preview-sub" data-i18n="preview_sub">Así se verá en Facebook</p>
+            <!-- Tabs solo para versiones activas; el label indica posición entre activas -->
+            <div id="fb-preview-tabs-wrap" class="fb-preview-tabs-wrap hidden">
+              <p id="fb-preview-version-label" class="fb-preview-version-label muted"></p>
+              <div id="fb-preview-tabs" class="fb-preview-tabs" role="tablist"></div>
+            </div>
+            <div class="fb-preview">
+              <div class="fb-preview-header">
+                <div id="fb-preview-avatar" class="fb-preview-avatar" aria-hidden="true">?</div>
+                <div>
+                  <div id="fb-preview-name" class="fb-preview-name">—</div>
+                  <div class="fb-preview-meta" data-i18n="preview_meta">Grupo público · Ahora</div>
+                </div>
+              </div>
+              <div id="fb-preview-text" class="fb-preview-text"></div>
+              <div id="fb-preview-image-wrap" class="fb-preview-image-wrap hidden">
+                <img id="fb-preview-image" class="fb-preview-image" alt="" />
+              </div>
+              <div id="fb-preview-placeholder" class="fb-preview-placeholder"></div>
+              <div class="fb-preview-actions">
+                <span>👍 <span data-i18n="preview_like">Me gusta</span></span>
+                <span>💬 <span data-i18n="preview_comment">Comentar</span></span>
+                <span>↗ <span data-i18n="preview_share">Compartir</span></span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- HISTORIAL -->
+        <section id="tab-history" class="tab-panel">
+          <div class="panel-intro">
+            <h2 data-i18n="history_title">Historial de Publicaciones</h2>
+            <p class="panel-subtitle muted" data-i18n="history_subtitle">Aquí puedes ver todo lo que ha publicado tu bot</p>
+          </div>
+
+          <p id="history-summary" class="history-summary"></p>
+
+          <div class="hist-filters">
+            <span class="hist-filter-label muted" data-i18n="hist_period_label">Período:</span>
+            <div class="hist-chips">
+              <button type="button" class="chip hist-period-btn" data-period="today" data-i18n="hist_today">Hoy</button>
+              <button type="button" class="chip hist-period-btn active" data-period="week" data-i18n="hist_week">Esta semana</button>
+              <button type="button" class="chip hist-period-btn" data-period="month" data-i18n="hist_month">Este mes</button>
+            </div>
+          </div>
+          <div class="hist-filters">
+            <span class="hist-filter-label muted" data-i18n="hist_result_label">Resultado:</span>
+            <div class="hist-chips">
+              <button type="button" class="chip hist-result-btn" data-result="ok" data-i18n="hist_ok">✅ Exitosas</button>
+              <button type="button" class="chip hist-result-btn" data-result="error" data-i18n="hist_err">❌ Fallidas</button>
+              <button type="button" class="chip hist-result-btn active" data-result="all" data-i18n="hist_all">Todas</button>
+            </div>
+          </div>
+
+          <div class="row-btns">
+            <button id="btn-export-csv" class="btn btn-secondary" type="button" data-i18n="btn_export_csv">Exportar CSV</button>
+          </div>
+
+          <div class="table-wrap">
+            <table class="data-table data-table-history">
+              <thead>
+                <tr>
+                  <th data-i18n="col_date">Fecha y hora</th>
+                  <th data-i18n="col_group">Grupo</th>
+                  <th data-i18n="col_result">Resultado</th>
+                </tr>
+              </thead>
+              <tbody id="history-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- CONFIG -->
+        <section id="tab-settings" class="tab-panel">
+          <div class="settings-block card-elevated">
+            <h2 class="settings-block-title" data-i18n="fb_section_title">Tu Cuenta de Facebook</h2>
+            <p class="muted settings-block-sub" data-i18n="fb_section_sub">Conecta la cuenta con la que quieres publicar en los grupos</p>
+            <!-- Sin sesión: aviso + botón conectar -->
+            <p id="fb-disconnected-hint" class="fb-warning muted" data-i18n="fb_no_account">⚠️ No hay cuenta conectada</p>
+            <div class="card-block fb-account-card">
+              <div id="fb-connect-row">
+                <button id="btn-fb-connect" class="btn btn-primary" type="button" data-i18n="btn_connect_fb_big">🔗 Conectar mi cuenta de Facebook</button>
+              </div>
+              <!-- Con sesión: badge, detalle (nombre o texto genérico), actualizar / desconectar -->
+              <div id="fb-connected-row" class="hidden">
+                <div id="fb-connected-badge" class="fb-connected-badge" data-i18n="fb_badge_connected">✅ Conectado</div>
+                <p id="fb-connected-detail" class="fb-connected-detail"></p>
+                <div id="fb-profile" class="fb-profile hidden">
+                  <img id="fb-photo" alt="" />
+                </div>
+                <div class="fb-account-actions">
+                  <button id="btn-fb-refresh-name" class="btn btn-secondary" type="button" data-i18n="btn_fb_update_name">Actualizar nombre</button>
+                  <button id="btn-fb-disconnect" class="btn btn-ghost" type="button" data-i18n="btn_disconnect_fb">Desconectar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Días de descanso eliminados: el bot publica todos los días dentro del horario -->
+          <div class="settings-block card-elevated">
+            <h2 class="settings-block-title" data-i18n="notif_title">Notificaciones</h2>
+            <label><span data-i18n="notif_email">Email para alertas</span><input type="email" id="notif-email" class="input" /></label>
+          </div>
+
+          <input type="hidden" id="campaign-name" value="" />
+
+          <button id="btn-save-settings" class="btn btn-primary" type="button" data-i18n="btn_save">Guardar configuración</button>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal búsqueda grupos -->
+  <div id="modal-search" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-card card-elevated modal-card-wide">
+      <h3 data-i18n="modal_search_title">Buscar grupos</h3>
+      <input type="text" id="modal-search-input" class="input" placeholder="Palabra clave" />
+      <!-- Botón con spinner: estado "Buscando..." se controla desde renderer.js -->
+      <button id="modal-search-run" class="btn btn-primary" type="button">
+        <span class="btn-spinner" aria-hidden="true"></span>
+        <span id="modal-search-run-label" data-i18n="btn_search">Buscar</span>
+      </button>
+      <p id="modal-search-status" class="modal-search-status" role="status" aria-live="polite"></p>
+      <!-- Barra de progreso estimada (0–90% mientras busca; 100% al terminar) -->
+      <div id="searchProgress" class="search-progress" style="display: none">
+        <div class="search-progress-bar" id="searchProgressBar"></div>
+        <span id="searchProgressText">
+          Abriendo Facebook...
+        </span>
+      </div>
+      <!-- Solo se listan grupos donde el usuario ya es miembro (filtro en renderer.js) -->
+      <div class="modal-search-toolbar">
+        <p id="modal-search-count" class="modal-search-count muted"></p>
+      </div>
+      <p id="modal-search-marketplace-note" class="modal-search-note muted hidden" role="note"></p>
+      <div id="modal-search-results" class="modal-results"></div>
+      <div class="modal-actions">
+        <button id="modal-search-add-selected" class="btn btn-primary" type="button" data-i18n="btn_add_selected">Añadir seleccionados</button>
+        <button id="modal-search-close" class="btn btn-ghost" type="button" data-i18n="btn_close">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts de publicación exitosa (apilados) -->
+  <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

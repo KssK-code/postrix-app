@@ -1,0 +1,67 @@
+{
+  "name": "postrix-app",
+  "productName": "Postrix by Solvix",
+  "version": "1.0.0",
+  "description": "Postrix by Solvix - Publicación masiva en grupos de Facebook",
+  "author": "Solvix",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win --x64",
+    "build:dir": "electron-builder --win --x64 --dir",
+    "postinstall": "playwright install chromium",
+    "icon": "node scripts/generate-icon.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "electron-store": "^10.0.0",
+    "node-cron": "^3.0.3",
+    "node-machine-id": "^1.1.12",
+    "playwright": "^1.49.1",
+    "systeminformation": "^5.23.5"
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^25.1.8",
+    "sharp": "^0.33.5",
+    "to-ico": "^1.1.5"
+  },
+  "build": {
+    "appId": "mx.solvix.postrix",
+    "productName": "Postrix by Solvix",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!dist/**",
+      "!node_modules/playwright/browsers/**",
+      "!**/*.map",
+      "!**/test-*.js",
+      "!**/test-*.cjs",
+      "!**/postrix.db"
+    ],
+    "extraResources": [],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Postrix by Solvix",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    }
+  }
+}
