@@ -1,7 +1,7 @@
 {
   "name": "postrix-app",
   "productName": "Postrix by Solvix",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Postrix by Solvix - Publicación masiva en grupos de Facebook",
   "author": "Solvix",
   "main": "main.js",
@@ -9,6 +9,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "prebuild": "node scripts/copy-playwright.js",
     "build": "electron-builder",
     "build:win": "electron-builder --win --x64",
     "build:dir": "electron-builder --win --x64 --dir",
@@ -30,6 +31,7 @@
   "devDependencies": {
     "electron": "^28.3.3",
     "electron-builder": "^25.1.8",
+    "fs-extra": "^11.3.4",
     "sharp": "^0.33.5",
     "to-ico": "^1.1.5"
   },
@@ -43,13 +45,19 @@
     "files": [
       "**/*",
       "!dist/**",
-      "!node_modules/playwright/browsers/**",
+      "!ms-playwright/**",
       "!**/*.map",
       "!**/test-*.js",
       "!**/test-*.cjs",
       "!**/postrix.db"
     ],
-    "extraResources": [],
+    "extraResources": [
+      {
+        "from": "ms-playwright",
+        "to": "ms-playwright",
+        "filter": ["**/*"]
+      }
+    ],
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico"

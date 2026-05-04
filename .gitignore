@@ -4,3 +4,4 @@ dist/
 *.db
 logs/
 debug-*.png
+ms-playwright/

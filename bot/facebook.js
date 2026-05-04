@@ -4,11 +4,29 @@
  * Excepción: refresh del nombre desde cookies usa Chromium headless (solo lectura, sin login).
  * Los selectores de Facebook cambian con frecuencia — revisar si falla.
  */
+import { app } from 'electron';
 import { chromium } from 'playwright';
 import path from 'path';
 import { writeLog } from '../utils/logger.js';
 import { getStore } from '../config/settings.js';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
+
+/**
+ * En el .exe empaquetado, pasamos executablePath directo a chromium.launch().
+ * NO usamos PLAYWRIGHT_BROWSERS_PATH: Playwright lo cachea al cargar el módulo
+ * (top-level IIFE en su registry), antes de que el cuerpo de este módulo corra.
+ * Por eso v1.0.1 falló: setear el env var después de `import { chromium }` era inútil.
+ */
+function getBundledChromiumExec() {
+  if (!app?.isPackaged) return undefined;
+  const baseDir = path.join(process.resourcesPath, 'ms-playwright');
+  if (!existsSync(baseDir)) return undefined;
+  const chromiumDir = readdirSync(baseDir).find((d) => /^chromium-\d+$/.test(d));
+  if (!chromiumDir) return undefined;
+  const exe = path.join(baseDir, chromiumDir, 'chrome-win64', 'chrome.exe');
+  return existsSync(exe) ? exe : undefined;
+}
+export const BUNDLED_CHROME = getBundledChromiumExec();
 
 export const FB_ORIGIN = 'https://www.facebook.com';
 
@@ -25,6 +43,7 @@ function getChromiumVisibleLaunchOptions() {
       '--disable-notifications',
       '--disable-blink-features=AutomationControlled',
     ],
+    ...(BUNDLED_CHROME ? { executablePath: BUNDLED_CHROME } : {}),
   };
 }
 
@@ -46,6 +65,7 @@ function getChromiumConnectLaunchOptions() {
       '--no-zygote',
       '--disable-gpu',
     ],
+    ...(BUNDLED_CHROME ? { executablePath: BUNDLED_CHROME } : {}),
   };
 }
 
@@ -646,6 +666,7 @@ export async function refreshFacebookDisplayName() {
     browser = await chromium.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-dev-shm-usage'],
+      ...(BUNDLED_CHROME ? { executablePath: BUNDLED_CHROME } : {}),
     });
     const context = await browser.newContext({
       userAgent:
@@ -689,6 +710,11 @@ export async function connectFacebookVisible(accountId = 'default') {
   let browser = null;
   // Tiempo máximo para que el usuario complete el login a mano (evita cierre prematuro)
   const LOGIN_WAIT_MS = 300_000; // 5 minutos — coincide con waitForFunction timeout
+
+  writeLog('INFO', '[FB] Chromium bundle detection', {
+    isPackaged: app?.isPackaged,
+    bundledChrome: BUNDLED_CHROME || '(none — usará default Playwright path)',
+  });
 
   console.log('[FB Login] Abriendo navegador...');
   writeLog('INFO', '[FB Login] Abriendo navegador...');
@@ -946,6 +972,23 @@ export async function publishInGroup(page, groupId, content) {
   if (pendingApproval) {
     console.log('[FB] ⚠️ Grupo con solicitud pendiente — no se publica');
     return fail('pending_approval');
+  }
+
+  // El usuario no es miembro: aparece botón "Unirse al grupo" / "Join group"
+  const notMember = await page.evaluate(() => {
+    const bodyText = (document.body.innerText || '').toLowerCase();
+    return (
+      bodyText.includes('unirse al grupo') ||
+      bodyText.includes('join group') ||
+      bodyText.includes('join this group') ||
+      bodyText.includes('únete al grupo') ||
+      bodyText.includes('solicitar unirse')
+    );
+  });
+
+  if (notMember) {
+    console.log('[FB] ⚠️ No eres miembro del grupo — botón "Unirse" detectado, saltando');
+    return fail('not_member');
   }
 
   // Mensajes de límite / spam de Facebook: pausar bot desde el planificador

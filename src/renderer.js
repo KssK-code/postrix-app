@@ -34,6 +34,11 @@
       tab_groups: 'Mis Grupos',
       tab_content: 'Mi Publicación',
       tab_history: 'Historial',
+      tab_fblive: 'Facebook Live',
+      fblive_title: '🌐 Facebook Live',
+      fblive_reload: '↻ Recargar',
+      fblive_loading: 'Cargando Facebook…',
+      fblive_no_session: 'Conecta tu cuenta de Facebook primero en Configuración.',
       tab_config: 'Configuración',
       btn_settings: 'Ajustes',
       btn_update_pay: 'Pagar update',
@@ -100,6 +105,7 @@
         'Publicado hace {ago} — próximo en {next}: "{name}"',
       prog_err: 'Error en "{name}"',
       prog_wait: 'Esperando {t} para la siguiente ronda',
+      prog_round_summary: '📊 Ronda completada — {pub} publicados · {skip} saltados de {total} grupos',
       stat_posts_today: 'Publicaciones hoy: {n}',
       stat_groups_reached: 'Grupos alcanzados: {n}',
       stat_next_round: 'Próxima ronda: {t}',
@@ -279,6 +285,11 @@
       tab_groups: 'My Groups',
       tab_content: 'My Post',
       tab_history: 'History',
+      tab_fblive: 'Facebook Live',
+      fblive_title: '🌐 Facebook Live',
+      fblive_reload: '↻ Reload',
+      fblive_loading: 'Loading Facebook…',
+      fblive_no_session: 'Connect your Facebook account first in Settings.',
       tab_config: 'Settings',
       btn_settings: 'Settings',
       btn_update_pay: 'Pay for update',
@@ -344,6 +355,7 @@
         'Posted {ago} ago — next in {next}: "{name}"',
       prog_err: 'Error in "{name}"',
       prog_wait: 'Waiting {t} until next round',
+      prog_round_summary: '📊 Round done — {pub} posted · {skip} skipped of {total} groups',
       stat_posts_today: 'Posts today: {n}',
       stat_groups_reached: 'Groups reached: {n}',
       stat_next_round: 'Next round: {t}',
@@ -846,6 +858,12 @@
     } else if (ev.status === 'error') {
       cls = 'cq-err';
       text = `❌ ${timeStr} — ${t('prog_err').replace('{name}', name)}`;
+    } else if (ev.status === 'round_summary') {
+      cls = 'cq-round-summary';
+      text = t('prog_round_summary')
+        .replace('{pub}', String(ev.published ?? 0))
+        .replace('{skip}', String(ev.skipped ?? 0))
+        .replace('{total}', String(ev.total ?? 0));
     } else if (ev.status === 'waiting') {
       cls = 'cq-wait';
       text = `⏰ ${timeStr} — ${t('prog_wait').replace('{t}', formatDelayMs(ev.nextDelayMs))}`;
@@ -1067,21 +1085,16 @@
     renderFbPreview(base, data);
   }
 
-  /** Formato amigable para “próxima publicación” (ej. 2h 45min). */
+  /** Cuenta regresiva en formato H:MM:SS — se actualiza cada segundo desde refreshStats. */
   function formatNextRunMs(diffMs) {
     if (diffMs <= 0) return t('stat_next_na');
-    const totalM = Math.floor(diffMs / 60000);
-    const h = Math.floor(totalM / 60);
-    const m = totalM % 60;
-    const s = Math.floor((diffMs % 60000) / 1000);
-    if (lang === 'es') {
-      if (h > 0) return `${h}h ${m}min`;
-      if (totalM > 0) return `${m} min ${s}s`;
-      return `${s}s`;
-    }
-    if (h > 0) return `${h}h ${m}m`;
-    if (totalM > 0) return `${m}m ${s}s`;
-    return `${s}s`;
+    const totalS = Math.floor(diffMs / 1000);
+    const h = Math.floor(totalS / 3600);
+    const m = Math.floor((totalS % 3600) / 60);
+    const s = totalS % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    if (h > 0) return `${h}:${pad(m)}:${pad(s)}`;
+    return `${pad(m)}:${pad(s)}`;
   }
 
   /** Muestra u oculta la tarjeta de bienvenida (solo campaña detenida). */
@@ -1127,6 +1140,15 @@
     updateCampaignChecklist(data, st);
     syncCampaignPanels(st);
     maybeToastNewPost(data);
+
+    // Cuenta regresiva en tiempo real en el panel activo (MEJORA 7)
+    if (st.running && !st.paused && st.nextRunAt) {
+      const detail = document.getElementById('campaign-active-detail');
+      if (detail && !detail.dataset.posting) {
+        const diff = Math.max(0, new Date(st.nextRunAt).getTime() - Date.now());
+        detail.textContent = (lang === 'es' ? '⏰ Próxima ronda en ' : '⏰ Next round in ') + formatNextRunMs(diff);
+      }
+    }
 
     await updateCampaignWelcomeCard();
   }
@@ -1599,7 +1621,21 @@
       document.querySelectorAll('.tab-panel').forEach((p) => {
         p.classList.toggle('active', p.id === `tab-${tab}`);
       });
+      if (tab !== 'fblive') api.fbliveHide?.();
     });
+  });
+
+  // Facebook Live — BrowserView gestionado desde main.js
+  document.querySelector('[data-tab="fblive"]')?.addEventListener('click', () => {
+    const header = document.querySelector('.app-header');
+    const topbar = document.querySelector('.fblive-topbar');
+    const headerH = header ? header.offsetHeight : 88;
+    const topbarH = topbar ? topbar.offsetHeight : 44;
+    api.fbliveShow({ headerH, topbarH });
+  });
+
+  document.getElementById('btn-fblive-reload')?.addEventListener('click', () => {
+    api.fbliveReload?.();
   });
 
   document.getElementById('btn-settings-header').onclick = () => {
@@ -1715,45 +1751,6 @@
     await refreshStats();
   }
 
-  document.getElementById('btn-activate').onclick = async () => {
-    const key = document.getElementById('license-input').value.trim();
-    const msg = document.getElementById('activation-msg');
-    const btn = document.getElementById('btn-activate');
-    msg.textContent = '';
-    msg.className = 'msg msg-activation';
-    if (!key) {
-      msg.classList.add('error');
-      msg.textContent =
-        lang === 'es'
-          ? 'Escribe tu clave de licencia para continuar.'
-          : 'Enter your license key to continue.';
-      return;
-    }
-    btn.classList.add('is-loading');
-    btn.disabled = true;
-    let res;
-    try {
-      res = await api.activate(key);
-    } catch (e) {
-      res = { ok: false, reason: 'network_error', message: e.message };
-    } finally {
-      btn.classList.remove('is-loading');
-      btn.disabled = false;
-    }
-    if (res.ok) {
-      msg.classList.add('ok');
-      msg.textContent = t('log_activation_ok');
-      logLine(t('log_activation_ok'));
-      setTimeout(() => loadDashboard(), 450);
-    } else {
-      msg.classList.add('error');
-      if (res.reason === 'network_error') msg.textContent = t('err_network');
-      else if (res.reason === 'wrong_hardware') msg.textContent = t('err_hw');
-      else if (res.reason === 'invalid_key') msg.textContent = t('err_invalid_key');
-      else if (res.reason === 'inactive_license') msg.textContent = t('err_inactive_license');
-      else msg.textContent = t('err_invalid');
-    }
-  };
 
   /** Inicia el scheduler o reanuda si estaba en pausa. */
   async function handleBotStartOrResume() {
@@ -2027,10 +2024,12 @@
       await syncFacebookConnectionUI(await api.settingsGet());
       logLine(t('log_fb_connected'));
     } else {
+      const logPath = res?.logFile || '%APPDATA%/postrix-app/logs/postrix.log';
+      const errCode = res?.error || (lang === 'es' ? 'desconocido' : 'unknown');
       logLine(
         lang === 'es'
-          ? 'No se pudo conectar. Cierra e intenta de nuevo, o revisa tu internet.'
-          : 'Could not connect. Try again or check your connection.'
+          ? `No se pudo conectar (${errCode}). Revisa el log en: ${logPath} y envíalo a soporte.`
+          : `Could not connect (${errCode}). Check the log at: ${logPath} and send it to support.`
       );
     }
   };
@@ -2067,19 +2066,24 @@
   };
   document.getElementById('btn-save-settings').onclick = () => saveRulesFromForm();
 
-  // Update banner
-  document.getElementById('update-banner-link').onclick = async () => {
-    const chk = await api.licenseCheck();
-    if (chk.update_price_url) await api.openExternal(chk.update_price_url);
-  };
+
+  function setFbLiveIndicator(active) {
+    document.getElementById('fblive-indicator')?.classList.toggle('active', active);
+  }
 
   api.onBotTick(() => refreshStats());
   api.onBotStatus((data) => {
     if (data.status) setBotStatus(data.status);
+    if (data.status === 'stopped') setFbLiveIndicator(false);
+    if (data.status === 'running') setFbLiveIndicator(true);
     updateCampaignWelcomeCard();
   });
 
   api.onBotProgress((data) => {
+    if (data.status === 'posting' && data.groupId) {
+      const url = `https://www.facebook.com/groups/${data.groupId}`;
+      api.fbliveNavigate?.(url);
+    }
     if (data.status === 'restriction_detected') {
       void (async () => {
         const st = await api.botState();
@@ -2090,16 +2094,22 @@
       return;
     }
     const bar = document.getElementById('campaign-round-progress-bar');
+    const pctEl = document.getElementById('campaign-round-pct');
     const detail = document.getElementById('campaign-active-detail');
     if (data.totalGroups > 0 && bar) {
-      const pct = Math.min(100, (data.groupIndex / data.totalGroups) * 100);
-      bar.style.width = `${data.status === 'waiting' ? 100 : pct}%`;
+      const pct = Math.min(100, Math.round((data.groupIndex / data.totalGroups) * 100));
+      const barPct = data.status === 'waiting' ? 100 : pct;
+      bar.style.width = `${barPct}%`;
+      if (pctEl) pctEl.textContent = `${data.groupIndex} / ${data.totalGroups} · ${barPct}%`;
     }
     if (detail && data.status === 'posting') {
+      detail.dataset.posting = '1';
       detail.textContent = t('cap_in_group')
         .replace('{name}', String(data.groupName || ''))
         .replace('{i}', String(data.groupIndex))
         .replace('{n}', String(data.totalGroups));
+    } else if (detail && data.status === 'waiting') {
+      delete detail.dataset.posting;
     }
     if (data.status !== 'posting') {
       appendCampaignProgressLog(data);
@@ -2143,16 +2153,6 @@
     lang = navLang;
     applyI18n();
 
-    const startup = await api.licenseStartupCheck();
-    if (startup.check?.update_available) {
-      document.getElementById('update-banner').classList.remove('hidden');
-      document.getElementById('update-banner-text').textContent = t('update_banner');
-    }
-
-    if (startup.showActivation) {
-      setView('activation');
-    } else {
-      await loadDashboard();
-    }
+    await loadDashboard();
   })();
 })();
