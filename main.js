@@ -1,7 +1,7 @@
 /**
  * Proceso principal de Electron — ventana, IPC y orquestación del bot.
  */
-import { app, BrowserWindow, BrowserView, ipcMain, dialog, shell, Notification, session } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, Notification } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -70,14 +70,6 @@ function migrateCriticalStoreRules() {
 process.env.APP_VERSION = process.env.APP_VERSION || '1.0.0';
 
 let mainWindow = null;
-let fbLiveView = null;
-let fbLiveOffsets = { headerH: 88, topbarH: 44 };
-
-function getFbLiveBounds() {
-  const { width, height } = mainWindow.getContentBounds();
-  const y = fbLiveOffsets.headerH + fbLiveOffsets.topbarH;
-  return { x: 220, y, width: Math.max(100, width - 220), height: Math.max(100, height - y) };
-}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -99,12 +91,6 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
-
-  mainWindow.on('resize', () => {
-    if (fbLiveView && mainWindow.getBrowserViews().includes(fbLiveView)) {
-      fbLiveView.setBounds(getFbLiveBounds());
-    }
-  });
 
   /** Solo abrir DevTools en modo desarrollo (no en build NSIS / producción). */
   if (process.argv.includes('--dev') || process.env.NODE_ENV === 'development') {
@@ -129,64 +115,6 @@ app.whenReady().then(async () => {
   migrateCriticalStoreRules();
 
   createWindow();
-
-  // ── Facebook Live (BrowserView) ────────────────────────────────────────
-  ipcMain.handle('fblive:show', async (_event, offsets) => {
-    if (offsets) fbLiveOffsets = { ...fbLiveOffsets, ...offsets };
-
-    // Inyectar cookies en la sesión del BrowserView
-    const store = getStore();
-    const raw = store.get('fb_session_cookies');
-    if (raw && typeof raw === 'string' && raw.length > 2) {
-      let cookies;
-      try { cookies = JSON.parse(raw); } catch { cookies = []; }
-      if (Array.isArray(cookies) && cookies.length) {
-        const ses = session.fromPartition('persist:fb-live');
-        const sameSiteMap = { Strict: 'strict', Lax: 'lax', None: 'no_restriction' };
-        for (const c of cookies) {
-          try {
-            await ses.cookies.set({
-              url: `https://${(c.domain || '').replace(/^\./, '')}`,
-              name: c.name, value: c.value, domain: c.domain,
-              path: c.path || '/', secure: !!c.secure, httpOnly: !!c.httpOnly,
-              ...(c.expires > 0 ? { expirationDate: c.expires } : {}),
-              sameSite: sameSiteMap[c.sameSite] || 'no_restriction',
-            });
-          } catch (e) {
-            console.warn('[fblive] cookie skip:', c.name, e.message);
-          }
-        }
-      }
-    }
-
-    if (!fbLiveView) {
-      fbLiveView = new BrowserView({
-        webPreferences: { partition: 'persist:fb-live', contextIsolation: true },
-      });
-      fbLiveView.webContents.loadURL('https://www.facebook.com');
-    }
-
-    mainWindow.addBrowserView(fbLiveView);
-    fbLiveView.setBounds(getFbLiveBounds());
-    return { ok: true };
-  });
-
-  ipcMain.handle('fblive:hide', () => {
-    if (fbLiveView) mainWindow.removeBrowserView(fbLiveView);
-    return { ok: true };
-  });
-
-  ipcMain.handle('fblive:reload', () => {
-    if (fbLiveView) fbLiveView.webContents.reload();
-    return { ok: true };
-  });
-
-  ipcMain.handle('fblive:navigate', (_event, url) => {
-    if (fbLiveView && typeof url === 'string' && url.startsWith('http')) {
-      fbLiveView.webContents.loadURL(url);
-    }
-    return { ok: true };
-  });
 
   ipcMain.handle('settings:get', () => {
     const s = getStore();

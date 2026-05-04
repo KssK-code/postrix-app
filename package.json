@@ -1,7 +1,7 @@
 {
   "name": "postrix-app",
   "productName": "Postrix by Solvix",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Postrix by Solvix - Publicación masiva en grupos de Facebook",
   "author": "Solvix",
   "main": "main.js",
@@ -13,7 +13,7 @@
     "build": "electron-builder",
     "build:win": "electron-builder --win --x64",
     "build:dir": "electron-builder --win --x64 --dir",
-    "postinstall": "playwright install chromium",
+    "setup": "playwright install chromium",
     "icon": "node scripts/generate-icon.js"
   },
   "engines": {
@@ -39,6 +39,7 @@
     "appId": "mx.solvix.postrix",
     "productName": "Postrix by Solvix",
     "asar": true,
+    "npmRebuild": false,
     "directories": {
       "output": "dist"
     },

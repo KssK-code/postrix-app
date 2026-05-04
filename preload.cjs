@@ -4,11 +4,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('postrix', {
-  getEnv: () => ipcRenderer.invoke('app:getEnv'),
-  licenseStartupCheck: () => ipcRenderer.invoke('license:startupCheck'),
-  activate: (licenseKey) => ipcRenderer.invoke('license:activate', licenseKey),
-  licenseActivate: (key) => ipcRenderer.invoke('license:activate', key),
-  licenseCheck: () => ipcRenderer.invoke('license:check'),
   settingsGet: () => ipcRenderer.invoke('settings:get'),
   settingsSet: (patch) => ipcRenderer.invoke('settings:set', patch),
   /** Lectura directa de una clave del store (p. ej. fb_user_name, fb_session_cookies) */

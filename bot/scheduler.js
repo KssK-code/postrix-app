@@ -53,6 +53,7 @@ const SKIP_ROUND_REASONS = new Set([
   'marketplace_only_group',
   'buy_sell_group_no_text_post',
   'pending_approval',
+  'not_member',
 ]);
 
 /** Solo estos motivos marcan el grupo en store como compraventa (no reintentar feed) */
@@ -66,6 +67,15 @@ function markGroupMembershipMarketplace(store, groupId) {
   const id = String(groupId);
   const next = groups.map((g) =>
     String(g.id) === id ? { ...g, membership: 'marketplace' } : g
+  );
+  store.set('groups', next);
+}
+
+function markGroupNotMember(store, groupId) {
+  const groups = store.get('groups') || [];
+  const id = String(groupId);
+  const next = groups.map((g) =>
+    String(g.id) === id ? { ...g, membership: 'not_member' } : g
   );
   store.set('groups', next);
 }
@@ -310,9 +320,9 @@ async function runRoundBody(accountId) {
 
   console.log('[Round] ✅ Hay grupos en store; filtrando activos y comprobando contenido...');
 
-  // Excluir grupos ya marcados como solo compraventa (no reintentar)
+  // Solo grupos donde el usuario ya es miembro confirmado
   const groups = groupsAll.filter(
-    (g) => g.status === 'active' && g.membership !== 'marketplace'
+    (g) => g.status === 'active' && g.membership === 'member'
   );
   const contentSlots = store.get('contentSlots') || [];
   const activeSlots = contentSlots.filter((s) => s.active && (s.text || s.imagePath));
@@ -361,8 +371,12 @@ async function runRoundBody(accountId) {
     ...activeGroups.slice(startIndex),
     ...activeGroups.slice(0, startIndex),
   ];
-  /** Grupos de esta ronda: rotados para repartir carga; tamaño limitado por warm-up y n. */
+  // Corte de la rotación + shuffle Fisher-Yates para orden diferente en cada ronda
   const groupsThisRound = rotatedGroups.slice(0, Math.min(n, rotatedGroups.length));
+  for (let i = groupsThisRound.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [groupsThisRound[i], groupsThisRound[j]] = [groupsThisRound[j], groupsThisRound[i]];
+  }
 
   const statsAfterRot = { ...(store.get('stats') || {}) };
   const nextRoundIdx = { ...(statsAfterRot.roundIndexByDay || {}) };
@@ -387,6 +401,11 @@ async function runRoundBody(accountId) {
   );
   console.log('[Round] n tras warm-up y tope:', n);
   console.log('[Round] Slice final:', groupsThisRound.length);
+
+  const roundStartedAt = new Date().toISOString();
+  let roundPublished = 0;
+  let roundSkipped = 0;
+
   const slotIndex = parseInt(store.get('lastSlotUsed') || '0', 10) % activeSlots.length;
   const slot = activeSlots[slotIndex];
   store.set('lastSlotUsed', String((slotIndex + 1) % activeSlots.length));
@@ -469,6 +488,7 @@ async function runRoundBody(accountId) {
       groupName: gname,
       groupIndex: gi + 1,
       totalGroups: total,
+      groupId: group.id,
       status: 'posting',
       message: 'publicando',
     });
@@ -534,20 +554,23 @@ async function runRoundBody(accountId) {
     if (skipRound) {
       if (SKIP_MARKETPLACE_STORE_REASONS.has(res.reason)) {
         markGroupMembershipMarketplace(store, group.id);
+      } else if (res.reason === 'not_member') {
+        markGroupNotMember(store, group.id);
       }
       writeLog('INFO', 'Scheduler: grupo saltado (sin publicar en esta ronda)', {
         groupId: group.id,
         reason: res.reason,
       });
       const isMp = SKIP_MARKETPLACE_STORE_REASONS.has(res.reason);
+      const isNotMember = res.reason === 'not_member';
       progressPayload({
         groupName: displayName,
         groupIndex: gi + 1,
         totalGroups: groupsThisRound.length,
         status: 'skipped',
         reason: res.reason,
-        skipDetail: isMp ? 'marketplace' : 'pending',
-        message: isMp ? 'skipped_marketplace' : 'skipped_pending',
+        skipDetail: isMp ? 'marketplace' : isNotMember ? 'not_member' : 'pending',
+        message: isMp ? 'skipped_marketplace' : isNotMember ? 'skipped_not_member' : 'skipped_pending',
       });
     } else {
       progressPayload({
@@ -583,12 +606,15 @@ async function runRoundBody(accountId) {
       break;
     }
     if (res.ok) {
+      roundPublished++;
       bumpPostCount();
       markGroupLastPost(store, group.id);
       console.log(`[Round] ✅ Marcado último post en grupo (intervalo): ${gname}`);
+    } else if (skipRound) {
+      roundSkipped++;
     }
 
-    // Pausa 15–30 s solo tras intento real (OK o error); saltos (compraventa / pendiente) sin espera
+    // Pausa aleatoria entre grupos (MEJORA 5): 20–50 s para comportamiento más humano
     if (
       !skipRound &&
       gi < groupsThisRound.length - 1 &&
@@ -596,12 +622,22 @@ async function runRoundBody(accountId) {
       !state.paused
     ) {
       console.log('[Round] Esperando entre grupos...');
-      await randomDelay(15_000, 30_000);
+      await randomDelay(20_000, 50_000);
     }
   }
 
   if (groupsThisRound.length > 0 && state.running && !state.paused) {
     const delayMs = computeNextDelayMs(getEffectiveRules(store));
+    // Resumen de ronda (MEJORA 4 + 1): datos para log y notificación nativa
+    progressPayload({
+      status: 'round_summary',
+      published: roundPublished,
+      skipped: roundSkipped,
+      total: groupsThisRound.length,
+      roundStartedAt,
+      roundEndedAt: new Date().toISOString(),
+      nextDelayMs: delayMs,
+    });
     progressPayload({
       groupName: '',
       groupIndex: groupsThisRound.length,

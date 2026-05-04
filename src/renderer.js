@@ -34,11 +34,6 @@
       tab_groups: 'Mis Grupos',
       tab_content: 'Mi Publicación',
       tab_history: 'Historial',
-      tab_fblive: 'Facebook Live',
-      fblive_title: '🌐 Facebook Live',
-      fblive_reload: '↻ Recargar',
-      fblive_loading: 'Cargando Facebook…',
-      fblive_no_session: 'Conecta tu cuenta de Facebook primero en Configuración.',
       tab_config: 'Configuración',
       btn_settings: 'Ajustes',
       btn_update_pay: 'Pagar update',
@@ -285,11 +280,6 @@
       tab_groups: 'My Groups',
       tab_content: 'My Post',
       tab_history: 'History',
-      tab_fblive: 'Facebook Live',
-      fblive_title: '🌐 Facebook Live',
-      fblive_reload: '↻ Reload',
-      fblive_loading: 'Loading Facebook…',
-      fblive_no_session: 'Connect your Facebook account first in Settings.',
       tab_config: 'Settings',
       btn_settings: 'Settings',
       btn_update_pay: 'Pay for update',
@@ -1621,21 +1611,7 @@
       document.querySelectorAll('.tab-panel').forEach((p) => {
         p.classList.toggle('active', p.id === `tab-${tab}`);
       });
-      if (tab !== 'fblive') api.fbliveHide?.();
     });
-  });
-
-  // Facebook Live — BrowserView gestionado desde main.js
-  document.querySelector('[data-tab="fblive"]')?.addEventListener('click', () => {
-    const header = document.querySelector('.app-header');
-    const topbar = document.querySelector('.fblive-topbar');
-    const headerH = header ? header.offsetHeight : 88;
-    const topbarH = topbar ? topbar.offsetHeight : 44;
-    api.fbliveShow({ headerH, topbarH });
-  });
-
-  document.getElementById('btn-fblive-reload')?.addEventListener('click', () => {
-    api.fbliveReload?.();
   });
 
   document.getElementById('btn-settings-header').onclick = () => {
@@ -2024,7 +2000,7 @@
       await syncFacebookConnectionUI(await api.settingsGet());
       logLine(t('log_fb_connected'));
     } else {
-      const logPath = res?.logFile || '%APPDATA%/postrix-app/logs/postrix.log';
+      const logPath = res?.logFile || '%APPDATA%/Postrix by Solvix/logs/postrix.log';
       const errCode = res?.error || (lang === 'es' ? 'desconocido' : 'unknown');
       logLine(
         lang === 'es'
@@ -2066,24 +2042,13 @@
   };
   document.getElementById('btn-save-settings').onclick = () => saveRulesFromForm();
 
-
-  function setFbLiveIndicator(active) {
-    document.getElementById('fblive-indicator')?.classList.toggle('active', active);
-  }
-
   api.onBotTick(() => refreshStats());
   api.onBotStatus((data) => {
     if (data.status) setBotStatus(data.status);
-    if (data.status === 'stopped') setFbLiveIndicator(false);
-    if (data.status === 'running') setFbLiveIndicator(true);
     updateCampaignWelcomeCard();
   });
 
   api.onBotProgress((data) => {
-    if (data.status === 'posting' && data.groupId) {
-      const url = `https://www.facebook.com/groups/${data.groupId}`;
-      api.fbliveNavigate?.(url);
-    }
     if (data.status === 'restriction_detected') {
       void (async () => {
         const st = await api.botState();
