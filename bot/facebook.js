@@ -9,7 +9,46 @@ import { chromium } from 'playwright';
 import path from 'path';
 import { writeLog } from '../utils/logger.js';
 import { getStore } from '../config/settings.js';
-import { existsSync, readdirSync } from 'fs';
+import { existsSync, readdirSync, mkdirSync } from 'fs';
+
+/**
+ * Modo desarrollo: solo entonces se guardan screenshots de debug.
+ * Producción nunca debe escribir en process.cwd() (puede ser Program Files).
+ */
+function isDevMode() {
+  return (
+    process.argv.includes('--dev') ||
+    process.env.NODE_ENV === 'development' ||
+    process.env.POSTRIX_DEBUG === '1'
+  );
+}
+
+/**
+ * Devuelve la ruta a un archivo dentro del directorio de debug del usuario,
+ * creando la carpeta si no existe. En producción (sin flag dev) retorna null.
+ */
+function getDebugFilePath(filename) {
+  if (!isDevMode()) return null;
+  try {
+    const base = app?.getPath ? app.getPath('userData') : process.cwd();
+    const dir = path.join(base, 'debug');
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    return path.join(dir, filename);
+  } catch (e) {
+    writeLog('WARN', '[FB] No se pudo preparar carpeta de debug', { message: e.message });
+    return null;
+  }
+}
+
+/**
+ * Guarda un screenshot de debug — no-op en producción.
+ */
+async function debugScreenshot(page, filename, options = {}) {
+  const target = getDebugFilePath(filename);
+  if (!target) return;
+  await page.screenshot({ path: target, ...options }).catch(() => {});
+  console.log('[FB] Screenshot debug:', target);
+}
 
 /**
  * En el .exe empaquetado, pasamos executablePath directo a chromium.launch().
@@ -37,6 +76,8 @@ function getChromiumVisibleLaunchOptions() {
   return {
     headless: false,
     slowMo: 80,
+    /** Timeout duro en lanzamiento: si Chromium cuelga (binario corrupto, AV, etc.) la app no se queda frozen. */
+    timeout: 60_000,
     args: [
       '--window-size=480,780',
       '--window-position=750,50',
@@ -52,6 +93,8 @@ function getChromiumConnectLaunchOptions() {
   return {
     headless: false,
     slowMo: 50,
+    /** Timeout duro en lanzamiento: 60 s para no dejar la app frozen si Chromium no arranca. */
+    timeout: 60_000,
     args: [
       '--window-size=1280,800',
       '--window-position=100,50',
@@ -280,10 +323,7 @@ async function tryClickComposer(page) {
       return null;
     });
     if (method3Debug && method3Debug.ok) {
-      await page
-        .screenshot({ path: path.join(process.cwd(), 'debug-method3-click.png') })
-        .catch(() => {});
-      console.log('[FB] Screenshot método 3 guardado: debug-method3-click.png');
+      await debugScreenshot(page, 'method3-click.png');
       console.log('[FB] ✅ Compositor método 3 (debug):', JSON.stringify(method3Debug));
       await randomDelay(3000, 4000);
       return true;
@@ -414,9 +454,8 @@ export async function attachImageHuman(page, imagePath) {
     }
 
     if (!previewFound) {
-      const shot = path.join(process.cwd(), 'debug-image-upload.png');
-      await page.screenshot({ path: shot }).catch(() => {});
-      console.log('[FB] ⚠️ Preview no confirmado - screenshot guardado:', shot);
+      console.log('[FB] ⚠️ Preview no confirmado');
+      await debugScreenshot(page, 'image-upload.png');
     }
 
     await randomDelay(2000, 3000);
@@ -446,21 +485,41 @@ export function saveCookiesForAccount(accountId, cookies) {
 export function loadCookiesForAccount(accountId) {
   const store = getStore();
   const rawGlobal = store.get('fb_session_cookies');
+  /** Razones por las que cada fuente de cookies falló — se loguean al final si no hay éxito */
+  const failures = { global: null, account: null };
+
   if (rawGlobal && typeof rawGlobal === 'string' && rawGlobal.length > 2) {
     try {
       const parsed = JSON.parse(rawGlobal);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    } catch {
-      /* continuar */
+      failures.global = `parseado pero no es array válido (type=${Array.isArray(parsed) ? 'array_vacio' : typeof parsed})`;
+    } catch (e) {
+      failures.global = `JSON corrupto: ${e.message} (rawLength=${rawGlobal.length})`;
+    }
+  } else {
+    failures.global = 'ausente o vacío';
+  }
+
+  const acc = (store.get('facebookAccounts') || []).find((a) => a.id === accountId);
+  if (!acc?.cookies) {
+    failures.account = 'sin entrada o sin campo cookies';
+  } else {
+    try {
+      const parsedAcc = JSON.parse(acc.cookies);
+      if (Array.isArray(parsedAcc) && parsedAcc.length > 0) return parsedAcc;
+      failures.account = `parseado pero no es array válido (type=${Array.isArray(parsedAcc) ? 'array_vacio' : typeof parsedAcc})`;
+    } catch (e) {
+      failures.account = `JSON corrupto: ${e.message}`;
     }
   }
-  const acc = (store.get('facebookAccounts') || []).find((a) => a.id === accountId);
-  if (!acc?.cookies) return null;
-  try {
-    return JSON.parse(acc.cookies);
-  } catch {
-    return null;
-  }
+
+  // Llegamos aquí solo si AMBAS fuentes fallaron. Loguear el motivo consolidado.
+  writeLog('WARN', '[FB] loadCookiesForAccount: sin cookies utilizables (ambos fallbacks fallaron)', {
+    accountId,
+    fb_session_cookies: failures.global,
+    facebookAccounts_entry: failures.account,
+  });
+  return null;
 }
 
 /**
@@ -642,6 +701,88 @@ async function getFacebookUserName(page) {
 }
 
 /**
+ * Verifica rápidamente (headless) si la sesión de Facebook sigue activa.
+ * Navega a la portada y comprueba si hay redirección al login o ausencia de UI autenticada.
+ * En caso de error de red o timeout retorna ok=true para no interrumpir el bot por falsos positivos.
+ * @returns {Promise<{ ok: boolean, reason?: 'no_cookies' | 'session_expired' }>}
+ */
+export async function checkFacebookSession(accountId = 'default') {
+  const cookies = loadCookiesForAccount(accountId);
+  if (!cookies || cookies.length === 0) {
+    writeLog('WARN', '[FB] checkFacebookSession: sin cookies guardadas');
+    return { ok: false, reason: 'no_cookies' };
+  }
+
+  let browser = null;
+  try {
+    browser = await chromium.launch({
+      headless: true,
+      timeout: 60_000,
+      args: ['--no-sandbox', '--disable-dev-shm-usage'],
+      ...(BUNDLED_CHROME ? { executablePath: BUNDLED_CHROME } : {}),
+    });
+    const context = await browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 800 },
+      locale: 'es-MX',
+      timezoneId: 'America/Mexico_City',
+    });
+    await context.addCookies(cookies);
+    const page = await context.newPage();
+
+    await page.goto(`${FB_ORIGIN}/`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 20_000,
+    });
+    await sleep(2000);
+
+    const url = page.url().toLowerCase();
+    const redirectedToLogin =
+      url.includes('/login') ||
+      url.includes('login.php') ||
+      url.includes('/checkpoint/') ||
+      url.includes('/recover/') ||
+      url.includes('/two_step_verification/');
+
+    if (redirectedToLogin) {
+      writeLog('WARN', '[FB] checkFacebookSession: sesión expirada (redirección a login)', { url });
+      return { ok: false, reason: 'session_expired' };
+    }
+
+    // Confirmar elementos exclusivos de sesión autenticada
+    const isLoggedIn = await page.evaluate(() => {
+      const u = window.location.href.toLowerCase();
+      if (
+        u.includes('/login') ||
+        u.includes('login.php') ||
+        u.includes('/checkpoint/')
+      ) return false;
+      return !!(
+        document.querySelector('[role="feed"]') ||
+        document.querySelector('[data-pagelet="LeftRail"]') ||
+        document.querySelector('[role="navigation"]') ||
+        document.querySelector('[aria-label="Facebook"]')
+      );
+    });
+
+    if (!isLoggedIn) {
+      writeLog('WARN', '[FB] checkFacebookSession: sesión expirada (sin UI autenticada)');
+      return { ok: false, reason: 'session_expired' };
+    }
+
+    writeLog('INFO', '[FB] checkFacebookSession: sesión activa');
+    return { ok: true };
+  } catch (e) {
+    // Error de red, timeout u otro — no interrumpir el bot por esto
+    writeLog('WARN', '[FB] checkFacebookSession: error comprobando sesión (se continúa)', { message: e.message });
+    return { ok: true };
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+}
+
+/**
  * Relee el nombre con la sesión ya guardada (headless, sin pantalla de login).
  */
 export async function refreshFacebookDisplayName() {
@@ -665,6 +806,7 @@ export async function refreshFacebookDisplayName() {
   try {
     browser = await chromium.launch({
       headless: true,
+      timeout: 60_000,
       args: ['--no-sandbox', '--disable-dev-shm-usage'],
       ...(BUNDLED_CHROME ? { executablePath: BUNDLED_CHROME } : {}),
     });
@@ -864,7 +1006,16 @@ export async function resolveGroupIdFromSlug(slug, accountId = 'default') {
  * Usado en publicación, búsqueda de grupos y resolución de IDs.
  */
 export async function launchVisibleBrowser(accountId = 'default') {
-  const browser = await chromium.launch(getChromiumVisibleLaunchOptions());
+  let browser;
+  try {
+    browser = await chromium.launch(getChromiumVisibleLaunchOptions());
+  } catch (e) {
+    writeLog('ERROR', '[FB] launchVisibleBrowser: chromium.launch falló', {
+      message: e.message,
+      bundledChrome: BUNDLED_CHROME || '(default)',
+    });
+    throw e;
+  }
   const context = await browser.newContext({
     viewport: { width: 480, height: 780 },
     locale: 'es-ES',
@@ -1193,10 +1344,8 @@ export async function publishInGroup(page, groupId, content) {
     'div[role="button"]:has-text("Post")',
   ];
 
-  /** Captura del modal justo antes de intentar Publicar */
-  const beforePublishShot = path.join(process.cwd(), 'debug-before-publish.png');
-  await page.screenshot({ path: beforePublishShot, fullPage: false }).catch(() => {});
-  console.log('[FB] Screenshot antes de publicar guardado:', beforePublishShot);
+  /** Captura del modal justo antes de intentar Publicar (solo en dev mode) */
+  await debugScreenshot(page, 'before-publish.png', { fullPage: false });
 
   await randomDelay(2000, 3000);
 
@@ -1450,12 +1599,15 @@ export async function searchInMyGroups(page, keyword) {
  * Resultados con flag isMember según textos de la tarjeta (ES/EN).
  */
 export async function searchGroupsByKeyword(keyword, { accountId = 'default' } = {}) {
-  const { browser, context } = await launchVisibleBrowser(accountId);
-  const page = await context.newPage();
-  const q = encodeURIComponent(keyword);
-  const searchUrl = `${FB_ORIGIN}/search/groups/?q=${q}`;
-
+  let browser = null;
   try {
+    const launched = await launchVisibleBrowser(accountId);
+    browser = launched.browser;
+    const { context } = launched;
+    const page = await context.newPage();
+    const q = encodeURIComponent(keyword);
+    const searchUrl = `${FB_ORIGIN}/search/groups/?q=${q}`;
+
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
     try {
       await page.waitForSelector('[role="feed"]', { timeout: 10000 });
@@ -1580,8 +1732,6 @@ export async function searchGroupsByKeyword(keyword, { accountId = 'default' } =
       return Array.from(byId.values());
     });
 
-    await browser.close();
-
     const uniq = [];
     const seen = new Set();
     for (const r of scraped) {
@@ -1593,7 +1743,8 @@ export async function searchGroupsByKeyword(keyword, { accountId = 'default' } =
     return uniq;
   } catch (err) {
     writeLog('ERROR', 'searchGroupsByKeyword', { message: err.message });
-    await browser.close().catch(() => {});
     return [];
+  } finally {
+    if (browser) await browser.close().catch(() => {});
   }
 }

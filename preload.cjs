@@ -33,4 +33,8 @@ contextBridge.exposeInMainWorld('postrix', {
   onBotProgress: (cb) => ipcRenderer.on('bot:progress', (_, data) => cb(data)),
   onGroupsSearchProgress: (cb) =>
     ipcRenderer.on('groups:searchProgress', (_, data) => cb(data)),
+  /** Auto-update: el main avisa cuando una nueva versión ya se descargó. */
+  onUpdateReady: (cb) => ipcRenderer.on('app:update-ready', (_, data) => cb(data)),
+  /** Reinicia e instala la actualización descargada. */
+  installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
 });

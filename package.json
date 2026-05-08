@@ -1,7 +1,7 @@
 {
   "name": "postrix-app",
   "productName": "Postrix by Solvix",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Postrix by Solvix - Publicación masiva en grupos de Facebook",
   "author": "Solvix",
   "main": "main.js",
@@ -23,6 +23,7 @@
     "axios": "^1.7.9",
     "dotenv": "^16.4.7",
     "electron-store": "^10.0.0",
+    "electron-updater": "^6.8.3",
     "node-cron": "^3.0.3",
     "node-machine-id": "^1.1.12",
     "playwright": "^1.49.1",
@@ -40,6 +41,14 @@
     "productName": "Postrix by Solvix",
     "asar": true,
     "npmRebuild": false,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "KssK-code",
+        "repo": "postrix-app",
+        "releaseType": "release"
+      }
+    ],
     "directories": {
       "output": "dist"
     },
@@ -56,7 +65,9 @@
       {
         "from": "ms-playwright",
         "to": "ms-playwright",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {

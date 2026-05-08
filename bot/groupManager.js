@@ -24,10 +24,11 @@ function sleep(ms) {
 
 /**
  * Visita la página del grupo y detecta si es solo compraventa o si hay compositor de publicación.
- * En error de red o DOM, se asume compatible para no perder grupos válidos.
+ * En error de red o DOM, devuelve `{ unknown: true }` para que el caller no asuma compatible.
  *
  * @param {import('playwright').Page} page
  * @param {string} groupId
+ * @returns {Promise<{ isMarketplaceOnly?: boolean, hasComposer?: boolean, unknown?: boolean, error?: string }>}
  */
 export async function checkGroupType(page, groupId) {
   try {
@@ -73,7 +74,11 @@ export async function checkGroupType(page, groupId) {
 
     return result;
   } catch (e) {
-    return { isMarketplaceOnly: false, hasComposer: true };
+    writeLog('WARN', '[GroupManager] checkGroupType: error verificando grupo — unknown', {
+      groupId,
+      message: e.message,
+    });
+    return { unknown: true, error: e.message };
   }
 }
 
@@ -227,12 +232,27 @@ export async function verifyMarketplaceForGroups(groups, accountId = 'default') 
             checkGroupType(page, g.id),
             sleep(VERIFY_GROUP_TIMEOUT_MS).then(() => ({ _timeout: true })),
           ]);
-          const marketplace =
-            typed && !typed._timeout && typed.isMarketplaceOnly === true;
+
+          let groupType;
+          if (!typed || typed._timeout) {
+            writeLog('WARN', 'verifyMarketplaceForGroups: timeout verificando grupo', {
+              groupId: g.id,
+              timeoutMs: VERIFY_GROUP_TIMEOUT_MS,
+            });
+            groupType = 'unknown';
+          } else if (typed.unknown) {
+            // checkGroupType ya logueó el error
+            groupType = 'unknown';
+          } else if (typed.isMarketplaceOnly === true) {
+            groupType = 'marketplace';
+          } else {
+            groupType = 'compatible';
+          }
+
           resultMap.set(String(g.id), {
             id: g.id,
             name: g.name || `Grupo ${g.id}`,
-            groupType: marketplace ? 'marketplace' : 'compatible',
+            groupType,
           });
         }
       } finally {
@@ -242,13 +262,14 @@ export async function verifyMarketplaceForGroups(groups, accountId = 'default') 
 
     await Promise.all(Array.from({ length: VERIFY_CONCURRENCY }, () => worker()));
   } catch (err) {
-    writeLog('ERROR', 'verifyMarketplaceForGroups', { message: err.message });
+    writeLog('ERROR', 'verifyMarketplaceForGroups: fallo del browser/contexto', { message: err.message });
+    // Caída global: lo que no esté ya en resultMap se marca como unknown
     for (const g of list) {
       if (!resultMap.has(String(g.id))) {
         resultMap.set(String(g.id), {
           id: g.id,
           name: g.name || `Grupo ${g.id}`,
-          groupType: 'compatible',
+          groupType: 'unknown',
         });
       }
     }
@@ -259,7 +280,7 @@ export async function verifyMarketplaceForGroups(groups, accountId = 'default') 
   return list.map((g) => resultMap.get(String(g.id)) || {
     id: g.id,
     name: g.name || `Grupo ${g.id}`,
-    groupType: 'compatible',
+    groupType: 'unknown',
   });
 }
 

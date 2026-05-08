@@ -61,6 +61,15 @@
       <button id="update-banner-link" class="btn btn-sm btn-accent" type="button" data-i18n="btn_update_pay">Pagar update</button>
     </div>
 
+    <!-- Auto-update (electron-updater): aparece tras descarga completa -->
+    <div id="auto-update-banner" class="auto-update-banner hidden" role="status">
+      <span class="auto-update-icon" aria-hidden="true">✨</span>
+      <span class="auto-update-text" data-i18n="auto_update_ready">Nueva versión disponible</span>
+      <span id="auto-update-version" class="auto-update-version"></span>
+      <button id="auto-update-install" class="auto-update-btn" type="button" data-i18n="auto_update_install">Instalar y reiniciar</button>
+      <button id="auto-update-dismiss" class="auto-update-dismiss" type="button" aria-label="Cerrar">×</button>
+    </div>
+
     <div class="layout">
       <nav class="tabs-nav">
         <button class="tab-btn active" data-tab="campaign" data-i18n="tab_campaign">Mi Campaña</button>
@@ -101,6 +110,15 @@
               <strong data-i18n="restriction_title">Facebook detectó actividad inusual</strong>
               <p data-i18n="restriction_body">Tu bot está pausado automáticamente por 24 horas para proteger tu cuenta.</p>
               <p id="restriction-timer" class="restriction-timer">Reactivación en: —</p>
+            </div>
+          </div>
+
+          <!-- Alerta sesión de Facebook expirada -->
+          <div id="session-expired-alert" class="restriction-card hidden" role="alert" style="background: linear-gradient(135deg, #1877F2 0%, #0e4fa1 100%);">
+            <span class="restriction-card-emoji" aria-hidden="true">🔒</span>
+            <div class="restriction-card-body">
+              <strong data-i18n="session_expired_title">Tu sesión de Facebook expiró</strong>
+              <p data-i18n="session_expired_body">Las cookies de tu cuenta ya no son válidas. Ve a Configuración y vuelve a conectar tu cuenta de Facebook para continuar publicando.</p>
             </div>
           </div>
 

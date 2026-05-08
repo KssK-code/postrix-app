@@ -4,7 +4,7 @@
 import cron from 'node-cron';
 import { getStore } from '../config/settings.js';
 import { writeLog } from '../utils/logger.js';
-import { publishToGroup, randomDelay } from './facebook.js';
+import { publishToGroup, randomDelay, checkFacebookSession } from './facebook.js';
 
 /** Callback opcional: progreso por grupo / espera (IPC al renderer). */
 let onProgressReport = null;
@@ -320,10 +320,23 @@ async function runRoundBody(accountId) {
 
   console.log('[Round] ✅ Hay grupos en store; filtrando activos y comprobando contenido...');
 
-  // Solo grupos donde el usuario ya es miembro confirmado
-  const groups = groupsAll.filter(
+  // Solo grupos donde el usuario ya es miembro confirmado y cuya verificación fue OK
+  const eligibleByMembership = groupsAll.filter(
     (g) => g.status === 'active' && g.membership === 'member'
   );
+  const groups = eligibleByMembership.filter((g) => g.verifyStatus !== 'unknown');
+  const skippedUnknownCount = eligibleByMembership.length - groups.length;
+  if (skippedUnknownCount > 0) {
+    const sampleIds = eligibleByMembership
+      .filter((g) => g.verifyStatus === 'unknown')
+      .slice(0, 5)
+      .map((g) => g.id);
+    writeLog('WARN', 'Scheduler: grupos saltados por verificación desconocida', {
+      count: skippedUnknownCount,
+      sampleGroupIds: sampleIds,
+    });
+    console.log(`[Round] ⏭ ${skippedUnknownCount} grupo(s) saltados — verifyStatus=unknown`);
+  }
   const contentSlots = store.get('contentSlots') || [];
   const activeSlots = contentSlots.filter((s) => s.active && (s.text || s.imagePath));
 
@@ -348,6 +361,29 @@ async function runRoundBody(accountId) {
     state.paused = true;
     return;
   }
+
+  // Verificar sesión de Facebook antes de abrir ningún Chromium de publicación
+  console.log('[Round] Verificando sesión de Facebook...');
+  const sessionCheck = await checkFacebookSession(accountId);
+  if (!sessionCheck.ok && sessionCheck.reason === 'session_expired') {
+    console.log('[Round] 🔒 Sesión de Facebook expirada — bot detenido');
+    writeLog('ERROR', 'Scheduler: sesión de Facebook expirada — bot detenido');
+    state.running = false;
+    state.paused = false;
+    store.set('campaign', { ...(store.get('campaign') || {}), status: 'stopped' });
+    progressPayload({ status: 'session_expired' });
+    return;
+  }
+  if (!sessionCheck.ok && sessionCheck.reason === 'no_cookies') {
+    console.log('[Round] 🔒 Sin cookies de Facebook — bot detenido');
+    writeLog('ERROR', 'Scheduler: sin cookies de Facebook — bot detenido');
+    state.running = false;
+    state.paused = false;
+    store.set('campaign', { ...(store.get('campaign') || {}), status: 'stopped' });
+    progressPayload({ status: 'session_expired' });
+    return;
+  }
+  console.log('[Round] ✅ Sesión de Facebook activa');
 
   console.log('[Round] ✅ Continuando con la ronda (publicaciones)...');
 
@@ -495,6 +531,7 @@ async function runRoundBody(accountId) {
 
     // Un await tras otro: sin Promise.all ni map async
     let res;
+    const groupStartedAt = Date.now();
     try {
       res = await publishToGroup(accountId, group.id, {
         text: slot.text || '',
@@ -506,9 +543,19 @@ async function runRoundBody(accountId) {
         groupId: group.id,
         groupName: gname,
         message: err?.message || String(err),
+        durationMs: Date.now() - groupStartedAt,
       });
       res = { ok: false, reason: err?.message || 'error' };
     }
+    const groupDurationMs = Date.now() - groupStartedAt;
+    writeLog('INFO', 'Scheduler: publishToGroup timing', {
+      groupId: group.id,
+      groupName: gname,
+      durationMs: groupDurationMs,
+      durationSec: Math.round(groupDurationMs / 1000),
+      ok: !!res.ok,
+      reason: res.reason || null,
+    });
 
     // Restricción de Facebook: pausa 24 h, persiste en store y notifica al renderer
     if (res.reason === 'facebook_restriction' || res.pauseBot) {

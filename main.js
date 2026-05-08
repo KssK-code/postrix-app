@@ -6,6 +6,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import dotenv from 'dotenv';
+// electron-updater es CommonJS — importar por default y desestructurar.
+import electronUpdaterPkg from 'electron-updater';
+const { autoUpdater } = electronUpdaterPkg;
 
 import { initLogger, writeLog, getLogFilePath } from './utils/logger.js';
 import { getStore } from './config/settings.js';
@@ -35,6 +38,35 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 dotenv.config({ path: path.join(__dirname, '.env') });
+
+/**
+ * Captura cualquier error no manejado del proceso main para que el cliente nunca
+ * vea un cierre silencioso. Si el logger aún no está inicializado, cae a stderr.
+ */
+function safeWriteCrashLog(level, message, meta) {
+  try {
+    writeLog(level, message, meta);
+  } catch {
+    console.error(`[${level}]`, message, meta || '');
+  }
+}
+
+process.on('uncaughtException', (err) => {
+  safeWriteCrashLog('ERROR', '[MAIN] uncaughtException', {
+    message: err?.message || String(err),
+    stack: err?.stack || '(sin stack)',
+    name: err?.name || 'Error',
+  });
+});
+
+process.on('unhandledRejection', (reason) => {
+  const err = reason instanceof Error ? reason : null;
+  safeWriteCrashLog('ERROR', '[MAIN] unhandledRejection', {
+    message: err?.message || String(reason),
+    stack: err?.stack || '(sin stack)',
+    name: err?.name || 'UnhandledRejection',
+  });
+});
 
 /**
  * Corrige store antiguo con horas erróneas; resetea sesión de campaña.
@@ -108,6 +140,83 @@ function broadcast(channel, payload) {
   }
 }
 
+/**
+ * Configura electron-updater para descargar actualizaciones de GitHub Releases en background.
+ * Es totalmente fire-and-forget: cualquier fallo se logea sin afectar el arranque ni mostrar
+ * UI nativa al usuario. La instalación queda disparada por click explícito en el banner.
+ *
+ * No corre en modo dev (auto-update solo funciona con la app empaquetada y firmada).
+ */
+function setupAutoUpdater() {
+  if (!app.isPackaged) {
+    writeLog('INFO', '[Updater] omitido — app no empaquetada (modo dev)');
+    return;
+  }
+
+  try {
+    autoUpdater.logger = {
+      info: (m) => writeLog('INFO', '[Updater] ' + String(m)),
+      warn: (m) => writeLog('WARN', '[Updater] ' + String(m)),
+      error: (m) => writeLog('ERROR', '[Updater] ' + String(m)),
+      debug: () => {},
+    };
+
+    // Descarga automática en background tras detectar update
+    autoUpdater.autoDownload = true;
+    // No instalar al cerrar — esperar click explícito del usuario en el banner
+    autoUpdater.autoInstallOnAppQuit = false;
+    // Sin notificaciones nativas: el usuario decide vía nuestro banner
+    autoUpdater.disableWebInstaller = true;
+
+    autoUpdater.on('update-available', (info) => {
+      writeLog('INFO', '[Updater] update-available', {
+        version: info?.version,
+        releaseDate: info?.releaseDate,
+      });
+    });
+
+    autoUpdater.on('update-not-available', () => {
+      writeLog('INFO', '[Updater] sin actualización disponible');
+    });
+
+    autoUpdater.on('download-progress', (p) => {
+      // Loguear cada 25% para no saturar el archivo
+      const pct = Math.round(p?.percent || 0);
+      if (pct % 25 === 0) {
+        writeLog('INFO', '[Updater] descarga en progreso', { pct, transferred: p?.transferred });
+      }
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      writeLog('INFO', '[Updater] update-downloaded', { version: info?.version });
+      broadcast('app:update-ready', {
+        version: info?.version || null,
+        releaseNotes: typeof info?.releaseNotes === 'string' ? info.releaseNotes : null,
+      });
+    });
+
+    autoUpdater.on('error', (err) => {
+      // Errores silenciosos: sin internet, repo no accesible, etc.
+      writeLog('WARN', '[Updater] error (silenciado para el usuario)', {
+        message: err?.message || String(err),
+      });
+    });
+
+    // Disparar el check sin esperarlo. Cualquier excepción se atrapa abajo.
+    autoUpdater.checkForUpdates().catch((err) => {
+      writeLog('WARN', '[Updater] checkForUpdates falló (silenciado)', {
+        message: err?.message || String(err),
+      });
+    });
+  } catch (err) {
+    // Defensa final: si algo del setup mismo falla (require, config, etc.), no romper la app.
+    writeLog('ERROR', '[Updater] setup falló — auto-update deshabilitado en esta sesión', {
+      message: err?.message || String(err),
+      stack: err?.stack,
+    });
+  }
+}
+
 app.whenReady().then(async () => {
   initLogger(app.getPath('userData'));
   writeLog('INFO', 'Postrix iniciando', { version: process.env.APP_VERSION });
@@ -115,6 +224,15 @@ app.whenReady().then(async () => {
   migrateCriticalStoreRules();
 
   createWindow();
+
+  // Auto-update en background — totalmente independiente del arranque normal
+  try {
+    setupAutoUpdater();
+  } catch (err) {
+    writeLog('ERROR', '[MAIN] setupAutoUpdater lanzó (ignorado)', {
+      message: err?.message || String(err),
+    });
+  }
 
   ipcMain.handle('settings:get', () => {
     const s = getStore();
@@ -326,11 +444,31 @@ app.whenReady().then(async () => {
       const groups = store.get('groups') || [];
       console.log('[MAIN] Grupos en store:', groups.length);
 
-      const cookies = store.get('fb_session_cookies');
-      console.log(
-        '[MAIN] Cookies FB:',
-        cookies && String(cookies).length > 10 ? 'SI hay cookies' : 'NO hay cookies'
-      );
+      // Validación de cookies antes de abrir Chromium (evita arranque inútil)
+      const rawCookies = store.get('fb_session_cookies');
+      let cookiesValid = false;
+      if (rawCookies && typeof rawCookies === 'string' && rawCookies.length > 10) {
+        try {
+          const parsed = JSON.parse(rawCookies);
+          cookiesValid = Array.isArray(parsed) && parsed.length > 0;
+        } catch {
+          cookiesValid = false;
+        }
+      }
+      console.log('[MAIN] Cookies FB:', cookiesValid ? 'válidas' : 'AUSENTES o corruptas');
+
+      if (!cookiesValid) {
+        const msg = 'No hay sesión de Facebook conectada. Conecta tu cuenta antes de iniciar.';
+        writeLog('WARN', '[MAIN] bot:start abortado — cookies ausentes o inválidas', { accountId });
+        broadcast('bot:status', { status: 'stopped' });
+        broadcast('bot:progress', { status: 'session_expired' });
+        return {
+          ...getSchedulerState(),
+          ok: false,
+          error: msg,
+          reason: 'no_cookies',
+        };
+      }
 
       const slots = store.get('contentSlots') || [];
       console.log('[MAIN] Slots contenido:', slots.length);
@@ -347,6 +485,16 @@ app.whenReady().then(async () => {
         broadcast('bot:progress', data);
         if (data && data.status === 'restriction_detected') {
           broadcast('bot:status', { status: 'paused' });
+        }
+        if (data && data.status === 'session_expired') {
+          broadcast('bot:status', { status: 'stopped' });
+          if (Notification.isSupported()) {
+            new Notification({
+              title: 'Postrix — Sesión de Facebook expirada',
+              body: 'Tu sesión de Facebook expiró. Vuelve a conectar tu cuenta para continuar publicando.',
+            }).show();
+          }
+          writeLog('ERROR', '[MAIN] Sesión de Facebook expirada — bot detenido, usuario notificado');
         }
         if (data && data.status === 'round_summary' && Notification.isSupported()) {
           const nextTime = new Date(Date.now() + (data.nextDelayMs || 0));
@@ -436,6 +584,25 @@ app.whenReady().then(async () => {
       return true;
     }
     return false;
+  });
+
+  /**
+   * Instala la actualización descargada y reinicia. Llamado desde el banner del renderer.
+   * Si no hay update lista o falla, logea y retorna ok=false sin romper.
+   */
+  ipcMain.handle('app:installUpdate', async () => {
+    try {
+      writeLog('INFO', '[Updater] usuario solicitó instalar y reiniciar');
+      // isSilent=false para mostrar barra de progreso del instalador,
+      // isForceRunAfter=true para relanzar Postrix tras instalar.
+      autoUpdater.quitAndInstall(false, true);
+      return { ok: true };
+    } catch (err) {
+      writeLog('ERROR', '[Updater] quitAndInstall falló', {
+        message: err?.message || String(err),
+      });
+      return { ok: false, error: err?.message || 'unknown' };
+    }
   });
 
   app.on('activate', () => {

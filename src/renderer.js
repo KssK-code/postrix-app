@@ -38,6 +38,9 @@
       btn_settings: 'Ajustes',
       btn_update_pay: 'Pagar update',
       update_banner: 'Hay una nueva versión disponible.',
+      auto_update_ready: 'Nueva versión disponible',
+      auto_update_install: 'Instalar y reiniciar',
+      auto_update_version_label: 'v{v}',
       btn_start: '▶ INICIAR PUBLICACIÓN',
       btn_pause: '⏸ PAUSAR',
       btn_stop: '⏹ DETENER',
@@ -254,11 +257,16 @@
         'Se omitieron {n} grupo(s) solo compraventa (no admiten publicación de texto).',
       toast_verify_marketplace_failed:
         'No se pudo verificar los grupos. Intenta de nuevo o revisa la conexión.',
+      toast_verify_unknown:
+        '{n} grupo(s) no pudieron verificarse — se añadieron pero el bot los saltará hasta que vuelvas a verificarlos.',
       restriction_title: 'Facebook detectó actividad inusual',
       restriction_body:
         'Tu bot está pausado automáticamente por 24 horas para proteger tu cuenta.',
       restriction_until_line: 'Reactivación automática: {dt}',
       hist_res_fb_restriction: '🚨 Restricción de Facebook (pausa)',
+      session_expired_title: 'Tu sesión de Facebook expiró',
+      session_expired_body:
+        'Las cookies de tu cuenta ya no son válidas. Ve a Configuración y vuelve a conectar tu cuenta de Facebook para continuar publicando.',
     },
     en: {
       activation_sub: 'by Solvix',
@@ -284,6 +292,9 @@
       btn_settings: 'Settings',
       btn_update_pay: 'Pay for update',
       update_banner: 'A new version is available.',
+      auto_update_ready: 'New version available',
+      auto_update_install: 'Install and restart',
+      auto_update_version_label: 'v{v}',
       btn_start: '▶ START POSTING',
       btn_pause: '⏸ PAUSE',
       btn_stop: '⏹ STOP',
@@ -495,11 +506,16 @@
         'Skipped {n} buy/sell-only group(s) (no free-text posts).',
       toast_verify_marketplace_failed:
         'Could not verify groups. Try again or check your connection.',
+      toast_verify_unknown:
+        '{n} group(s) could not be verified — they were added but the bot will skip them until you re-verify.',
       restriction_title: 'Facebook flagged unusual activity',
       restriction_body:
         'Your bot was automatically paused for 24 hours to protect your account.',
       restriction_until_line: 'Auto-resume: {dt}',
       hist_res_fb_restriction: '🚨 Facebook restriction (cooldown)',
+      session_expired_title: 'Your Facebook session expired',
+      session_expired_body:
+        'Your account cookies are no longer valid. Go to Settings and reconnect your Facebook account to resume posting.',
     },
   };
 
@@ -1923,23 +1939,30 @@
 
       const toAdd = [];
       let skippedMp = 0;
+      let unknownCount = 0;
       for (const v of verified) {
         if (v.groupType === 'marketplace') {
           skippedMp += 1;
           continue;
         }
         const src = selected.find((s) => String(s.id) === String(v.id));
+        const isUnknown = v.groupType === 'unknown';
+        if (isUnknown) unknownCount += 1;
         toAdd.push({
           id: v.id,
           name: v.name || src?.name || `Grupo ${v.id}`,
           status: 'active',
           membership: 'member',
+          ...(isUnknown ? { verifyStatus: 'unknown' } : {}),
           ...(src?.members ? { members: src.members } : {}),
         });
       }
 
       if (skippedMp > 0) {
         showToastWarning(t('toast_marketplace_skipped').replace('{n}', String(skippedMp)));
+      }
+      if (unknownCount > 0) {
+        showToastWarning(t('toast_verify_unknown').replace('{n}', String(unknownCount)));
       }
       if (!toAdd.length) {
         return;
@@ -1997,6 +2020,7 @@
   document.getElementById('btn-fb-connect').onclick = async () => {
     const res = await api.facebookConnect();
     if (res.success) {
+      document.getElementById('session-expired-alert')?.classList.add('hidden');
       await syncFacebookConnectionUI(await api.settingsGet());
       logLine(t('log_fb_connected'));
     } else {
@@ -2058,6 +2082,15 @@
       })();
       return;
     }
+    if (data.status === 'session_expired') {
+      document.getElementById('session-expired-alert')?.classList.remove('hidden');
+      void (async () => {
+        const st = await api.botState();
+        updateCampaignChecklist(await api.settingsGet(), st);
+        syncCampaignPanels(st);
+      })();
+      return;
+    }
     const bar = document.getElementById('campaign-round-progress-bar');
     const pctEl = document.getElementById('campaign-round-pct');
     const detail = document.getElementById('campaign-active-detail');
@@ -2087,6 +2120,46 @@
       void refreshStats();
     }
   });
+
+  /**
+   * Auto-update (electron-updater): el main avisa cuando una nueva versión ya se descargó.
+   * Mostramos un banner discreto con botón para reiniciar e instalar. Errores y "no hay
+   * actualización" son silenciosos por diseño — el usuario nunca ve ruido por esto.
+   */
+  (function initAutoUpdateBanner() {
+    const banner = document.getElementById('auto-update-banner');
+    const versionEl = document.getElementById('auto-update-version');
+    const installBtn = document.getElementById('auto-update-install');
+    const dismissBtn = document.getElementById('auto-update-dismiss');
+    if (!banner || !installBtn) return;
+
+    if (typeof api.onUpdateReady === 'function') {
+      api.onUpdateReady((data) => {
+        if (versionEl && data?.version) {
+          versionEl.textContent = t('auto_update_version_label').replace('{v}', String(data.version));
+        }
+        banner.classList.remove('hidden');
+      });
+    }
+
+    installBtn.addEventListener('click', async () => {
+      installBtn.disabled = true;
+      try {
+        if (typeof api.installUpdate === 'function') {
+          await api.installUpdate();
+        }
+      } catch {
+        // Silencioso — si falla, el usuario puede reintentar o cerrar y abrir manualmente
+        installBtn.disabled = false;
+      }
+    });
+
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', () => {
+        banner.classList.add('hidden');
+      });
+    }
+  })();
 
   /** Chips de intervalo / grupos y hora fin (sesión). */
   (function initCampaignQuickControls() {
