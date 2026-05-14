@@ -281,6 +281,7 @@ function progressPayload(partial) {
 async function runRound(accountId) {
   if (runRoundInProgress) {
     console.log('[Round] ⏭️ Ronda ya en ejecución — se ignora esta llamada (sin paralelismo)');
+    progressPayload({ status: 'round_in_progress' });
     return;
   }
   runRoundInProgress = true;
@@ -315,6 +316,7 @@ async function runRoundBody(accountId) {
 
   if (groupsAll.length === 0) {
     console.log('[Round] ❌ Sin grupos en store — abortando ronda');
+    progressPayload({ status: 'no_groups' });
     return;
   }
 
@@ -346,12 +348,20 @@ async function runRoundBody(accountId) {
   if (!activeSlots.length || !groups.length) {
     console.log('[Round] ❌ Sin slots activos con texto/imagen o sin grupos activos — abortando');
     writeLog('WARN', 'Scheduler: sin contenido o grupos activos');
+    progressPayload({
+      status: activeSlots.length === 0 ? 'no_active_content' : 'no_active_groups',
+    });
     return;
   }
 
   if (!nowInWindow(rules)) {
     console.log('[Round] ❌ Fuera de ventana horaria — abortando');
     writeLog('INFO', 'Scheduler: fuera de ventana horaria');
+    progressPayload({
+      status: 'outside_hours',
+      hourStart: rules.hourStart,
+      hourEnd: rules.hourEnd,
+    });
     return;
   }
   // Sin días de descanso: publica cualquier día si está en la ventana horaria
@@ -359,6 +369,7 @@ async function runRoundBody(accountId) {
     console.log('[Round] ❌ Límite diario de publicaciones — pausando');
     writeLog('INFO', 'Scheduler: límite diario alcanzado');
     state.paused = true;
+    progressPayload({ status: 'daily_limit_reached' });
     return;
   }
 

@@ -122,6 +122,15 @@
             </div>
           </div>
 
+          <!-- Banner informativo: fuera de horario, sin grupos, etc. -->
+          <div id="bot-info-banner" class="restriction-card bot-info-card hidden" role="alert">
+            <span class="restriction-card-emoji" aria-hidden="true">⚠️</span>
+            <div class="restriction-card-body">
+              <strong id="bot-info-banner-title"></strong>
+              <p id="bot-info-banner-msg"></p>
+            </div>
+          </div>
+
           <!-- 1. Configuración rápida (sesión) -->
           <div class="campaign-quick card-elevated">
             <p class="campaign-section-label" data-i18n="cq_section_title">Configuración rápida</p>
@@ -346,6 +355,12 @@
           </div>
 
           <input type="hidden" id="campaign-name" value="" />
+
+          <div class="settings-block card-elevated">
+            <h2 class="settings-block-title" data-i18n="diag_section_title">Soporte</h2>
+            <p class="muted settings-block-sub" data-i18n="diag_section_sub">Si algo no funciona, copia el diagnóstico y envíalo al equipo de soporte.</p>
+            <button id="btn-copy-diagnostics" class="btn btn-secondary" type="button" data-i18n="btn_copy_diagnostics">📋 Copiar diagnóstico</button>
+          </div>
 
           <button id="btn-save-settings" class="btn btn-primary" type="button" data-i18n="btn_save">Guardar configuración</button>
         </section>

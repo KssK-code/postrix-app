@@ -267,6 +267,17 @@
       session_expired_title: 'Tu sesión de Facebook expiró',
       session_expired_body:
         'Las cookies de tu cuenta ya no son válidas. Ve a Configuración y vuelve a conectar tu cuenta de Facebook para continuar publicando.',
+      bot_info_no_cookies: 'Necesitas conectar Facebook primero. Ve a Configuración y conecta tu cuenta.',
+      bot_info_no_groups: 'Agrega al menos un grupo primero. Ve a la pestaña Mis Grupos.',
+      bot_info_no_content: 'Agrega al menos una publicación activa. Ve a Mi Publicación.',
+      bot_info_outside_hours: 'El bot publica entre {start} y {end}. Configura otro horario en Ajustes o intenta más tarde.',
+      bot_info_daily_limit: 'Ya alcanzaste el límite de publicaciones de hoy. El bot se reactivará mañana.',
+      bot_info_round_in_progress: 'Hay una ronda en proceso. Espera unos segundos.',
+      btn_copy_diagnostics: '📋 Copiar diagnóstico',
+      diag_section_title: 'Soporte',
+      diag_section_sub: 'Si algo no funciona, copia el diagnóstico y envíalo al equipo de soporte.',
+      toast_diagnostics_copied: 'Diagnóstico copiado. Pégalo en WhatsApp para enviarlo a soporte.',
+      toast_diagnostics_error: 'No se pudo copiar el diagnóstico. Intenta de nuevo.',
     },
     en: {
       activation_sub: 'by Solvix',
@@ -516,6 +527,17 @@
       session_expired_title: 'Your Facebook session expired',
       session_expired_body:
         'Your account cookies are no longer valid. Go to Settings and reconnect your Facebook account to resume posting.',
+      bot_info_no_cookies: 'You need to connect Facebook first. Go to Settings and connect your account.',
+      bot_info_no_groups: 'Add at least one group first. Go to the My Groups tab.',
+      bot_info_no_content: 'Add at least one active post. Go to My Post.',
+      bot_info_outside_hours: 'The bot publishes between {start} and {end}. Change the schedule in Settings or try later.',
+      bot_info_daily_limit: "You've reached today's post limit. The bot will resume tomorrow.",
+      bot_info_round_in_progress: 'A round is in progress. Wait a few seconds.',
+      btn_copy_diagnostics: '📋 Copy diagnostics',
+      diag_section_title: 'Support',
+      diag_section_sub: "If something isn't working, copy the diagnostics and send to support.",
+      toast_diagnostics_copied: 'Diagnostics copied. Paste in WhatsApp to send to support.',
+      toast_diagnostics_error: 'Could not copy diagnostics. Try again.',
     },
   };
 
@@ -945,6 +967,57 @@
       el.classList.add('toast-notification--out');
       setTimeout(() => el.remove(), 350);
     }, 2500);
+  }
+
+  /** Toast verde para confirmaciones (p. ej. diagnóstico copiado). */
+  function showToastInfo(message) {
+    const stack = document.getElementById('toast-stack');
+    if (!stack) return;
+    const el = document.createElement('div');
+    el.className = 'toast-notification';
+    el.innerHTML = `<div class="toast-title">${escapeHtml(message)}</div>`;
+    stack.insertBefore(el, stack.firstChild);
+    setTimeout(() => {
+      el.classList.add('toast-notification--out');
+      setTimeout(() => el.remove(), 350);
+    }, 3500);
+  }
+
+  /** Banner persistente para errores de publicación (ámbar). Se oculta al detener o al publicar. */
+  function showBotInfoBanner(title, msg) {
+    const banner = document.getElementById('bot-info-banner');
+    const titleEl = document.getElementById('bot-info-banner-title');
+    const msgEl = document.getElementById('bot-info-banner-msg');
+    if (!banner) return;
+    if (titleEl) titleEl.textContent = title;
+    if (msgEl) msgEl.textContent = msg;
+    banner.classList.remove('hidden');
+  }
+
+  function hideBotInfoBanner() {
+    document.getElementById('bot-info-banner')?.classList.add('hidden');
+  }
+
+  /** Formatea el objeto de diagnóstico como texto plano para copiar al portapapeles. */
+  function formatDiagnostics(d) {
+    if (d.error) {
+      return `=== POSTRIX DIAGNÓSTICO ===\nError al recopilar: ${d.error}\n===========================`;
+    }
+    return [
+      '=== POSTRIX DIAGNÓSTICO ===',
+      `Versión app: ${d.appVersion}`,
+      `Hardware ID: ${d.hardwareId}`,
+      `Estado bot: ${d.botStatus}`,
+      `Facebook conectado: ${d.hasFacebookCookies ? 'Sí' : 'No'}`,
+      `Grupos agregados: ${d.groupsCount}`,
+      `Última publicación exitosa: ${d.lastSuccessfulPost}`,
+      `Horario configurado: ${d.hourStart} – ${d.hourEnd}`,
+      `Fecha/hora del PC: ${d.currentDateTime}`,
+      '',
+      '--- ÚLTIMAS 50 LÍNEAS DE LOG ---',
+      d.logLines || '(sin logs)',
+      '================================',
+    ].join('\n');
   }
 
   function fileUrlFromPath(p) {
@@ -1748,21 +1821,39 @@
   async function handleBotStartOrResume() {
     const st = await api.botState();
     if (st.restrictionActive) {
-      showToastWarning(
-        lang === 'es'
-          ? 'Facebook limitó la actividad. Espera a que termine la pausa de 24 h.'
-          : 'Facebook limited activity. Wait for the 24h cooldown to end.'
-      );
+      // La restriction-alert ya muestra el banner rojo persistente con countdown — solo retornar.
       return;
     }
     if (!st.paused && !st.running) {
       const data = await api.settingsGet();
-      if (!canStartCampaign(data)) return;
+      if (!canStartCampaign(data)) {
+        if (!isFacebookConnected(data)) {
+          showBotInfoBanner(
+            lang === 'es' ? '⚠️ Facebook no conectado' : '⚠️ Facebook not connected',
+            t('bot_info_no_cookies')
+          );
+        } else if (!(data.groups || []).length) {
+          showBotInfoBanner(
+            lang === 'es' ? '⚠️ Sin grupos' : '⚠️ No groups',
+            t('bot_info_no_groups')
+          );
+        } else {
+          showBotInfoBanner(
+            lang === 'es' ? '⚠️ Sin publicación activa' : '⚠️ No active post',
+            t('bot_info_no_content')
+          );
+        }
+        return;
+      }
     }
+    hideBotInfoBanner();
     if (st.paused) {
       const res = await api.botResume();
       if (res && res.ok === false && res.error) {
-        showToastWarning(res.error);
+        showBotInfoBanner(
+          lang === 'es' ? '⚠️ No se pudo reanudar' : '⚠️ Could not resume',
+          res.error
+        );
         void refreshStats();
         return;
       }
@@ -1771,7 +1862,17 @@
     } else {
       const res = await api.botStart();
       if (res && res.ok === false && res.error) {
-        showToastWarning(res.error);
+        if (res.reason === 'no_cookies') {
+          showBotInfoBanner(
+            lang === 'es' ? '⚠️ Facebook no conectado' : '⚠️ Facebook not connected',
+            t('bot_info_no_cookies')
+          );
+        } else {
+          showBotInfoBanner(
+            lang === 'es' ? '⚠️ Error al iniciar' : '⚠️ Start error',
+            res.error
+          );
+        }
         void refreshStats();
         return;
       }
@@ -2066,13 +2167,73 @@
   };
   document.getElementById('btn-save-settings').onclick = () => saveRulesFromForm();
 
+  document.getElementById('btn-copy-diagnostics')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-copy-diagnostics');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Recopilando...'; }
+    try {
+      const diag = await api.collectDiagnostics();
+      const text = formatDiagnostics(diag);
+      await navigator.clipboard.writeText(text);
+      showToastInfo(t('toast_diagnostics_copied'));
+    } catch {
+      showToastWarning(t('toast_diagnostics_error'));
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = t('btn_copy_diagnostics');
+      }
+    }
+  });
+
   api.onBotTick(() => refreshStats());
   api.onBotStatus((data) => {
     if (data.status) setBotStatus(data.status);
+    if (data.status === 'stopped') hideBotInfoBanner();
     updateCampaignWelcomeCard();
   });
 
   api.onBotProgress((data) => {
+    if (data.status === 'outside_hours') {
+      const msg = t('bot_info_outside_hours')
+        .replace('{start}', data.hourStart || '09:00')
+        .replace('{end}', data.hourEnd || '19:00');
+      showBotInfoBanner(
+        lang === 'es' ? '⏰ Fuera de horario' : '⏰ Outside active hours',
+        msg
+      );
+      return;
+    }
+    if (data.status === 'daily_limit_reached') {
+      showBotInfoBanner(
+        lang === 'es' ? '📊 Límite diario alcanzado' : '📊 Daily limit reached',
+        t('bot_info_daily_limit')
+      );
+      return;
+    }
+    if (data.status === 'no_groups') {
+      showBotInfoBanner(
+        lang === 'es' ? '⚠️ Sin grupos' : '⚠️ No groups',
+        t('bot_info_no_groups')
+      );
+      return;
+    }
+    if (data.status === 'no_active_content' || data.status === 'no_active_groups') {
+      showBotInfoBanner(
+        lang === 'es' ? '⚠️ Sin publicación activa' : '⚠️ No active post',
+        t('bot_info_no_content')
+      );
+      return;
+    }
+    if (data.status === 'round_in_progress') {
+      showBotInfoBanner(
+        lang === 'es' ? '⏳ Ronda en proceso' : '⏳ Round in progress',
+        t('bot_info_round_in_progress')
+      );
+      return;
+    }
+    if (data.status === 'posting') {
+      hideBotInfoBanner();
+    }
     if (data.status === 'restriction_detected') {
       void (async () => {
         const st = await api.botState();

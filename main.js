@@ -34,6 +34,7 @@ import {
   getSchedulerState,
   getFacebookRestrictionBlockInfo,
 } from './bot/scheduler.js';
+import { getHardwareIdSync } from './bot/hardwareId.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -566,6 +567,66 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle('bot:state', () => getSchedulerState());
+
+  ipcMain.handle('diagnostics:collect', async () => {
+    try {
+      const store = getStore();
+      const schedulerSt = getSchedulerState();
+      const groups = store.get('groups') || [];
+
+      // Verificar si hay cookies válidas de Facebook
+      const rawCookies = store.get('fb_session_cookies');
+      let hasFacebookCookies = false;
+      if (rawCookies && typeof rawCookies === 'string' && rawCookies.length > 10) {
+        try {
+          const parsed = JSON.parse(rawCookies);
+          hasFacebookCookies = Array.isArray(parsed) && parsed.length > 0;
+        } catch { /* cookies corruptas */ }
+      }
+
+      // Última publicación exitosa
+      const history = store.get('history') || [];
+      const lastOk = history.find((h) => h.result === 'ok');
+
+      // Horario configurado
+      const rules = store.get('rules') || {};
+      const campaignSession = store.get('campaign')?.session || {};
+
+      // Estado del bot
+      let botStatus = 'Detenido';
+      if (schedulerSt.running && schedulerSt.paused) botStatus = 'Pausado';
+      else if (schedulerSt.running) botStatus = 'Activo';
+
+      // Últimas 50 líneas del log
+      let logLines = '(sin logs disponibles)';
+      try {
+        const logPath = getLogFilePath();
+        if (logPath && fs.existsSync(logPath)) {
+          const raw = fs.readFileSync(logPath, 'utf8');
+          const lines = raw.split('\n').filter(Boolean);
+          logLines = lines.slice(-50).join('\n');
+        }
+      } catch (err) {
+        logLines = `(error leyendo log: ${err.message})`;
+      }
+
+      return {
+        appVersion: process.env.APP_VERSION || '1.0.0',
+        hardwareId: getHardwareIdSync(),
+        botStatus,
+        hasFacebookCookies,
+        groupsCount: groups.length,
+        lastSuccessfulPost: lastOk ? lastOk.at : 'Ninguna',
+        hourStart: rules.hourStart || campaignSession.hourStart || '09:00',
+        hourEnd: rules.hourEnd || campaignSession.hourEnd || '19:00',
+        currentDateTime: new Date().toISOString(),
+        logLines,
+      };
+    } catch (err) {
+      writeLog('ERROR', '[diagnostics:collect] falló', { message: err.message });
+      return { error: err.message };
+    }
+  });
 
   ipcMain.handle('dialog:selectImage', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {

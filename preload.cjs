@@ -37,4 +37,6 @@ contextBridge.exposeInMainWorld('postrix', {
   onUpdateReady: (cb) => ipcRenderer.on('app:update-ready', (_, data) => cb(data)),
   /** Reinicia e instala la actualización descargada. */
   installUpdate: () => ipcRenderer.invoke('app:installUpdate'),
+  /** Recopila diagnóstico del sistema para soporte. */
+  collectDiagnostics: () => ipcRenderer.invoke('diagnostics:collect'),
 });

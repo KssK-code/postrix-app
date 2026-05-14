@@ -1,7 +1,7 @@
 {
   "name": "postrix-app",
   "productName": "Postrix by Solvix",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Postrix by Solvix - Publicación masiva en grupos de Facebook",
   "author": "Solvix",
   "main": "main.js",
