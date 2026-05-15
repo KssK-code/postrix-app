@@ -65,7 +65,25 @@
       checklist_fb: 'Cuenta Facebook conectada',
       checklist_groups: 'Agrega al menos 1 grupo',
       checklist_post: 'Agrega al menos 1 publicación activa',
-      checklist_all_ready: '🚀 ¡Todo listo! Puedes iniciar',
+      checklist_all_ready: 'Todo listo para iniciar 🚀',
+      preflight_title: 'Antes de empezar',
+      preflight_subtitle: 'Completa estos requisitos para publicar',
+      preflight_fb_label: 'Facebook conectado',
+      preflight_fb_sub_ok: 'Tu cuenta está vinculada',
+      preflight_fb_sub_fail: 'Conecta tu cuenta de Facebook en Configuración',
+      preflight_groups_label: 'Grupos agregados',
+      preflight_groups_sub_ok_one: '1 grupo en tu lista',
+      preflight_groups_sub_ok_n: '{n} grupos en tu lista',
+      preflight_groups_sub_fail: 'Aún no agregas ningún grupo',
+      preflight_post_label: 'Publicación activa',
+      preflight_post_sub_ok_one: '1 versión activa',
+      preflight_post_sub_ok_n: '{n} versiones activas',
+      preflight_post_sub_fail: 'No tienes publicaciones activas',
+      preflight_hours_label: 'Dentro del horario',
+      preflight_hours_sub_ok: 'Horario configurado: {start} – {end}',
+      preflight_hours_sub_outside:
+        'El bot esperará hasta las {start} para empezar a publicar',
+      start_disabled_tooltip: 'Completa el checklist arriba para iniciar',
       toast_title: '✅ ¡Publicado exitosamente!',
       toast_groups_added: '✅ Se agregaron {n} grupos a tu lista',
       toast_select_groups_first: '⚠️ Selecciona al menos un grupo primero',
@@ -108,9 +126,6 @@
       stat_groups_reached: 'Grupos alcanzados: {n}',
       stat_next_round: 'Próxima ronda: {t}',
       stat_success_rate: 'Tasa de éxito: {p}',
-      ready_groups_line: '✅ {n} grupos listos',
-      ready_versions_line: '✅ {n} versiones de publicación',
-      ready_fb_line: '✅ Facebook conectado',
       label_campaign_name: 'Nombre de la campaña',
       placeholder_campaign: 'Nombre de tu campaña (ej: Promoción Mayo)',
       welcome_title: '🚀 ¿Listo para publicar?',
@@ -330,7 +345,25 @@
       checklist_fb: 'Facebook account connected',
       checklist_groups: 'Add at least 1 group',
       checklist_post: 'Add at least 1 active post',
-      checklist_all_ready: '🚀 All set! You can start',
+      checklist_all_ready: 'All set to start 🚀',
+      preflight_title: 'Before you start',
+      preflight_subtitle: 'Complete these requirements to publish',
+      preflight_fb_label: 'Facebook connected',
+      preflight_fb_sub_ok: 'Your account is linked',
+      preflight_fb_sub_fail: 'Connect your Facebook account in Settings',
+      preflight_groups_label: 'Groups added',
+      preflight_groups_sub_ok_one: '1 group on your list',
+      preflight_groups_sub_ok_n: '{n} groups on your list',
+      preflight_groups_sub_fail: "You haven't added any group yet",
+      preflight_post_label: 'Active post',
+      preflight_post_sub_ok_one: '1 active version',
+      preflight_post_sub_ok_n: '{n} active versions',
+      preflight_post_sub_fail: 'No active posts',
+      preflight_hours_label: 'Within posting hours',
+      preflight_hours_sub_ok: 'Schedule: {start} – {end}',
+      preflight_hours_sub_outside:
+        'The bot will wait until {start} to start posting',
+      start_disabled_tooltip: 'Complete the checklist above to start',
       toast_title: '✅ Posted successfully!',
       toast_groups_added: '✅ Added {n} groups to your list',
       toast_select_groups_first: '⚠️ Select at least one group first',
@@ -372,9 +405,6 @@
       stat_groups_reached: 'Groups reached: {n}',
       stat_next_round: 'Next round: {t}',
       stat_success_rate: 'Success rate: {p}',
-      ready_groups_line: '✅ {n} groups ready',
-      ready_versions_line: '✅ {n} post versions',
-      ready_fb_line: '✅ Facebook connected',
       label_campaign_name: 'Campaign name',
       placeholder_campaign: 'Name your campaign (e.g. May promo)',
       welcome_title: '🚀 Ready to post?',
@@ -652,7 +682,7 @@
     );
   }
 
-  /** Resumen de requisitos bajo el botón INICIAR (solo cuando el scheduler está parado). */
+  /** Checklist de pre-vuelo arriba del botón INICIAR (solo cuando el scheduler está parado). */
   function updateCampaignChecklist(data, botSt) {
     const itemsEl = document.getElementById('campaign-ready-summary');
     const readyEl = document.getElementById('campaign-ready-ready');
@@ -660,35 +690,113 @@
     if (!itemsEl) return;
 
     const fbOk = isFacebookConnected(data);
-    const groupsOk = (data.groups || []).length >= 1;
-    const slots = data.contentSlots || [];
-    const postOk = slots.some(
-      (s) => s.active && String(s.text || '').trim().length > 0
-    );
-    const allOk = fbOk && groupsOk && postOk;
-
     const nGroups = (data.groups || []).length;
+    const groupsOk = nGroups >= 1;
+    const slots = data.contentSlots || [];
     const nVers = slots.filter(
       (s) => s.active && String(s.text || '').trim().length > 0
     ).length;
+    const postOk = nVers >= 1;
+
+    // Horario configurado (sesión > rules > defecto)
+    const hourStart =
+      data.campaign?.session?.hourStart || data.rules?.hourStart || '09:00';
+    const hourEnd =
+      data.campaign?.session?.hourEnd || data.rules?.hourEnd || '19:00';
+    const toMin = (str) => {
+      const [h, m] = String(str).split(':').map((n) => Number(n) || 0);
+      return h * 60 + m;
+    };
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const insideHours = nowMin >= toMin(hourStart) && nowMin < toMin(hourEnd);
+
+    // Solo los 3 primeros bloquean el botón. El horario es informativo.
+    const allOk = fbOk && groupsOk && postOk;
+
+    const postSubOk =
+      nVers > 1
+        ? t('preflight_post_sub_ok_n').replace('{n}', String(nVers))
+        : t('preflight_post_sub_ok_one');
+    const groupsSubOk =
+      nGroups > 1
+        ? t('preflight_groups_sub_ok_n').replace('{n}', String(nGroups))
+        : t('preflight_groups_sub_ok_one');
 
     const rows = [
       {
-        ok: groupsOk,
-        label: t('ready_groups_line').replace('{n}', String(nGroups)),
+        key: 'fb',
+        ok: fbOk,
+        label: t('preflight_fb_label'),
+        sub: fbOk ? t('preflight_fb_sub_ok') : t('preflight_fb_sub_fail'),
+        actionTab: 'settings',
+        blocking: true,
       },
       {
-        ok: postOk,
-        label: t('ready_versions_line').replace('{n}', String(nVers)),
+        key: 'groups',
+        ok: groupsOk,
+        label: t('preflight_groups_label'),
+        sub: groupsOk ? groupsSubOk : t('preflight_groups_sub_fail'),
+        actionTab: 'groups',
+        blocking: true,
       },
-      { ok: fbOk, label: t('ready_fb_line') },
+      {
+        key: 'post',
+        ok: postOk,
+        label: t('preflight_post_label'),
+        sub: postOk ? postSubOk : t('preflight_post_sub_fail'),
+        actionTab: 'content',
+        blocking: true,
+      },
+      {
+        key: 'hours',
+        ok: insideHours,
+        label: t('preflight_hours_label'),
+        sub: insideHours
+          ? t('preflight_hours_sub_ok')
+              .replace('{start}', hourStart)
+              .replace('{end}', hourEnd)
+          : t('preflight_hours_sub_outside').replace('{start}', hourStart),
+        actionTab: null,
+        blocking: false,
+      },
     ];
+
     itemsEl.innerHTML = rows
-      .map(
-        (r) =>
-          `<li class="${r.ok ? 'is-done' : ''}"><span>${r.ok ? '✅' : '❌'}</span> ${escapeHtml(r.label)}</li>`
-      )
+      .map((r) => {
+        const clickable = !r.ok && r.actionTab;
+        const classes = [
+          'preflight-item',
+          r.ok ? 'is-ok' : 'is-fail',
+          !r.blocking ? 'is-info' : '',
+          clickable ? 'is-clickable' : '',
+        ]
+          .filter(Boolean)
+          .join(' ');
+        const icon = r.ok ? '✅' : '❌';
+        const body = `
+          <span class="preflight-icon" aria-hidden="true">${icon}</span>
+          <span class="preflight-body">
+            <span class="preflight-label">${escapeHtml(r.label)}</span>
+            <span class="preflight-sub">${escapeHtml(r.sub)}</span>
+          </span>
+          ${clickable ? '<span class="preflight-cta" aria-hidden="true">→</span>' : '<span aria-hidden="true"></span>'}
+        `;
+        if (clickable) {
+          return `<li><button type="button" class="${classes}" data-preflight-tab="${escapeHtml(r.actionTab)}" aria-label="${escapeHtml(r.label)}: ${escapeHtml(r.sub)}">${body}</button></li>`;
+        }
+        return `<li><div class="${classes}" role="status">${body}</div></li>`;
+      })
       .join('');
+
+    // Navegación a la pestaña que falta resolver
+    itemsEl.querySelectorAll('[data-preflight-tab]').forEach((btn) => {
+      btn.onclick = () => {
+        const tab = btn.getAttribute('data-preflight-tab');
+        const tabBtn = document.querySelector(`[data-tab="${tab}"]`);
+        if (tabBtn) tabBtn.click();
+      };
+    });
 
     if (readyEl) readyEl.classList.toggle('hidden', !allOk);
 
@@ -698,12 +806,16 @@
       if (restrictionActive) {
         startBtn.disabled = true;
         startBtn.classList.add('btn-start-disabled');
+        startBtn.title = '';
       } else if (!botSt.running) {
-        startBtn.disabled = !allOk;
-        startBtn.classList.toggle('btn-start-disabled', !allOk);
+        const disabled = !allOk;
+        startBtn.disabled = disabled;
+        startBtn.classList.toggle('btn-start-disabled', disabled);
+        startBtn.title = disabled ? t('start_disabled_tooltip') : '';
       } else {
         startBtn.disabled = false;
         startBtn.classList.remove('btn-start-disabled');
+        startBtn.title = '';
       }
     }
 

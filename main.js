@@ -611,7 +611,7 @@ app.whenReady().then(async () => {
       }
 
       return {
-        appVersion: process.env.APP_VERSION || '1.0.0',
+        appVersion: app.getVersion(),
         hardwareId: getHardwareIdSync(),
         botStatus,
         hasFacebookCookies,

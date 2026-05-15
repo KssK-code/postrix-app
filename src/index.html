@@ -158,11 +158,15 @@
             </div>
           </div>
 
-          <!-- 2. Bot detenido: inicio + requisitos -->
+          <!-- 2. Bot detenido: checklist de pre-vuelo + botón INICIAR -->
           <div id="campaign-panel-stopped" class="campaign-main card-elevated">
+            <div class="preflight-header">
+              <h3 class="preflight-title" data-i18n="preflight_title">Antes de empezar</h3>
+              <p class="preflight-subtitle muted" data-i18n="preflight_subtitle">Completa estos requisitos para publicar</p>
+            </div>
+            <ul class="preflight-checklist" id="campaign-ready-summary" aria-live="polite"></ul>
+            <p id="campaign-ready-ready" class="campaign-all-ready hidden" data-i18n="checklist_all_ready">Todo listo para iniciar 🚀</p>
             <button id="btn-bot-start" type="button" class="btn btn-success btn-campaign-hero" data-i18n="btn_start_now">▶ INICIAR PUBLICACIÓN AHORA</button>
-            <p id="campaign-ready-ready" class="campaign-all-ready hidden" data-i18n="checklist_all_ready">🚀 ¡Todo listo! Puedes iniciar</p>
-            <ul class="campaign-ready-list" id="campaign-ready-summary" aria-live="polite"></ul>
           </div>
 
           <!-- 2b. Bot en marcha -->
