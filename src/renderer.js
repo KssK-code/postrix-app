@@ -1419,6 +1419,19 @@
     return n;
   }
 
+  /** Cuenta total de entradas del historial (cualquier resultado) en los últimos `ms` ms.
+   * Usado para distinguir "ronda corrió pero no publicó en ningún grupo" vs "todavía no corre la primera ronda". */
+  function countRecentAnyHistoryEntries(history, ms) {
+    const cutoff = Date.now() - ms;
+    let n = 0;
+    for (const h of history || []) {
+      if (!h.at) continue;
+      const ts = Date.parse(h.at);
+      if (!Number.isNaN(ts) && ts >= cutoff) n += 1;
+    }
+    return n;
+  }
+
   /** Está dentro del horario configurado (hourStart..hourEnd hoy)? */
   function isWithinPostingHours(data) {
     const s = data.campaign?.session || {};
@@ -1482,19 +1495,29 @@
     if (botSt.nextRunAt) {
       const target = new Date(botSt.nextRunAt);
       const diff = Math.max(0, target.getTime() - Date.now());
-      const recentN = countRecentOkPosts(data.history, 10 * 60 * 1000);
-      // ¿Ya terminó al menos una ronda? Detectamos por entradas OK en los últimos 10 min.
-      // Si recentN === 0 y no hay historial OK reciente, asumimos pre-first-round.
-      if (recentN > 0) {
-        const key = recentN === 0 ? 'status_running_just_posted_zero' : 'status_running_just_posted';
+      const RECENT_MS = 10 * 60 * 1000;
+      const recentOk = countRecentOkPosts(data.history, RECENT_MS);
+      const recentAny = countRecentAnyHistoryEntries(data.history, RECENT_MS);
+      // Hubo ronda reciente con al menos una publicación OK
+      if (recentOk > 0) {
         return {
           variant: 'ok',
-          text: t(key)
-            .replace('{n}', String(recentN))
+          text: t('status_running_just_posted')
+            .replace('{n}', String(recentOk))
             .replace('{delay}', formatDelayMs(diff))
             .replace('{clock}', formatStatusClockHHmm(target)),
         };
       }
+      // Hubo ronda reciente, pero todos los grupos fueron saltados (compraventa, pendientes, etc.)
+      if (recentAny > 0) {
+        return {
+          variant: 'ok',
+          text: t('status_running_just_posted_zero')
+            .replace('{delay}', formatDelayMs(diff))
+            .replace('{clock}', formatStatusClockHHmm(target)),
+        };
+      }
+      // Todavía no hay actividad reciente: primera ronda en breve
       return { variant: 'waiting', text: t('status_running_pre_first_round') };
     }
 
