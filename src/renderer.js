@@ -2571,9 +2571,14 @@
   };
   document.getElementById('btn-save-settings').onclick = () => saveRulesFromForm();
 
-  document.getElementById('btn-copy-diagnostics')?.addEventListener('click', async () => {
-    const btn = document.getElementById('btn-copy-diagnostics');
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Recopilando...'; }
+  /** Recopila y copia el diagnóstico al portapapeles. Acepta el botón que disparó la acción
+   * para deshabilitarlo y restaurar su texto al terminar. Usado por Ajustes y modal de ayuda. */
+  async function runCopyDiagnostics(btn) {
+    if (btn) {
+      btn.disabled = true;
+      btn.dataset.prevLabel = btn.textContent;
+      btn.textContent = lang === 'es' ? '⏳ Recopilando...' : '⏳ Collecting...';
+    }
     try {
       const diag = await api.collectDiagnostics();
       const text = formatDiagnostics(diag);
@@ -2584,9 +2589,17 @@
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.textContent = t('btn_copy_diagnostics');
+        btn.textContent = btn.dataset.prevLabel || t('btn_copy_diagnostics');
+        delete btn.dataset.prevLabel;
       }
     }
+  }
+
+  document.getElementById('btn-copy-diagnostics')?.addEventListener('click', (e) => {
+    void runCopyDiagnostics(e.currentTarget);
+  });
+  document.getElementById('btn-copy-diagnostics-modal')?.addEventListener('click', (e) => {
+    void runCopyDiagnostics(e.currentTarget);
   });
 
   api.onBotTick(() => refreshStats());
