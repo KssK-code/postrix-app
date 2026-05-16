@@ -1394,6 +1394,126 @@
     return `${pad(m)}:${pad(s)}`;
   }
 
+  /** Hora local en formato HH:mm. Usa locale del idioma activo. */
+  function formatStatusClockHHmm(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleTimeString(lang === 'es' ? 'es-MX' : 'en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  }
+
+  /** Cuenta de publicaciones OK en los últimos `ms` milisegundos del historial. */
+  function countRecentOkPosts(history, ms) {
+    const cutoff = Date.now() - ms;
+    let n = 0;
+    for (const h of history || []) {
+      if (h.result !== 'ok' || !h.at) continue;
+      const t = Date.parse(h.at);
+      if (!Number.isNaN(t) && t >= cutoff) n += 1;
+    }
+    return n;
+  }
+
+  /** Está dentro del horario configurado (hourStart..hourEnd hoy)? */
+  function isWithinPostingHours(data) {
+    const s = data.campaign?.session || {};
+    const rules = data.rules || {};
+    const hourStart = s.hourStart || rules.hourStart || '09:00';
+    const hourEnd = s.hourEnd || rules.hourEnd || '19:00';
+    const toMin = (str) => {
+      const [h, m] = String(str).split(':').map((n) => Number(n) || 0);
+      return h * 60 + m;
+    };
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    return { inside: nowMin >= toMin(hourStart) && nowMin < toMin(hourEnd), hourStart, hourEnd };
+  }
+
+  /**
+   * Decide la variante visual y el texto de la tarjeta de estado.
+   * Función pura: solo lee `botSt` y `data` (sin DOM, sin IPC).
+   * Devuelve { variant, text } donde variant ∈ idle|ok|waiting|warn|error|paused.
+   */
+  function pickCampaignStatus(botSt, data) {
+    const sessionExpired = !document
+      .getElementById('session-expired-alert')
+      ?.classList.contains('hidden');
+
+    // 1. Restricción Facebook activa
+    if (botSt.restrictionActive && botSt.restrictionUntil) {
+      const diff = Math.max(0, Number(botSt.restrictionUntil) - Date.now());
+      return {
+        variant: 'error',
+        text: t('status_stopped_restriction').replace('{delay}', formatDelayMs(diff)),
+      };
+    }
+
+    // 2. Sesión expirada (banner azul visible)
+    if (sessionExpired) {
+      return { variant: 'error', text: t('status_stopped_session_expired') };
+    }
+
+    // 3. Bot detenido
+    if (!botSt.running) {
+      const campaignStatus = data.campaign?.status || 'stopped';
+      // El usuario lo pausó/detuvo a propósito
+      if (campaignStatus === 'paused' || data.campaign?.session?.userStopped) {
+        return { variant: 'paused', text: t('status_stopped_voluntary') };
+      }
+      return { variant: 'idle', text: t('status_idle_not_started') };
+    }
+
+    // 4. Bot pausado por el usuario
+    if (botSt.paused) {
+      return { variant: 'paused', text: t('status_paused_user') };
+    }
+
+    // 5. Bot corriendo, fuera de horario
+    const hrs = isWithinPostingHours(data);
+    if (!hrs.inside) {
+      return {
+        variant: 'waiting',
+        text: t('status_running_waiting_hours').replace('{clock}', hrs.hourStart),
+      };
+    }
+
+    // 6. Bot corriendo, en horario, próxima ronda agendada
+    if (botSt.nextRunAt) {
+      const target = new Date(botSt.nextRunAt);
+      const diff = Math.max(0, target.getTime() - Date.now());
+      const recentN = countRecentOkPosts(data.history, 10 * 60 * 1000);
+      // ¿Ya terminó al menos una ronda? Detectamos por entradas OK en los últimos 10 min.
+      // Si recentN === 0 y no hay historial OK reciente, asumimos pre-first-round.
+      if (recentN > 0) {
+        const key = recentN === 0 ? 'status_running_just_posted_zero' : 'status_running_just_posted';
+        return {
+          variant: 'ok',
+          text: t(key)
+            .replace('{n}', String(recentN))
+            .replace('{delay}', formatDelayMs(diff))
+            .replace('{clock}', formatStatusClockHHmm(target)),
+        };
+      }
+      return { variant: 'waiting', text: t('status_running_pre_first_round') };
+    }
+
+    // 7. Fallback: corriendo, en horario, sin próxima ronda aún
+    return { variant: 'waiting', text: t('status_running_pre_first_round') };
+  }
+
+  /** Dibuja la tarjeta de estado en el DOM. */
+  function renderCampaignStatusCard(botSt, data) {
+    const card = document.getElementById('campaign-status-card');
+    const msgEl = document.getElementById('campaign-status-card-msg');
+    if (!card || !msgEl) return;
+    const { variant, text } = pickCampaignStatus(botSt, data);
+    const className = `campaign-status-card campaign-status-card--${variant}`;
+    if (card.className !== className) card.className = className;
+    if (msgEl.textContent !== text) msgEl.textContent = text;
+  }
+
   /** Muestra u oculta la tarjeta de bienvenida (solo campaña detenida). */
   async function updateCampaignWelcomeCard() {
     const card = document.getElementById('campaign-welcome');
@@ -1448,6 +1568,7 @@
     }
 
     await updateCampaignWelcomeCard();
+    renderCampaignStatusCard(st, data);
   }
 
   /** Texto de miembros para la tabla (dato opcional al buscar en Facebook). */
