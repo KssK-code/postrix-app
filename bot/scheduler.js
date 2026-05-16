@@ -53,11 +53,15 @@ const SKIP_ROUND_REASONS = new Set([
   'marketplace_only_group',
   'buy_sell_group_no_text_post',
   'pending_approval',
+  'questions_required',
   'not_member',
 ]);
 
 /** Solo estos motivos marcan el grupo en store como compraventa (no reintentar feed) */
 const SKIP_MARKETPLACE_STORE_REASONS = new Set(['marketplace_only_group', 'buy_sell_group_no_text_post']);
+
+/** Motivos que marcan al grupo como solicitud pendiente (incluye muro de preguntas) */
+const SKIP_PENDING_STORE_REASONS = new Set(['pending_approval', 'questions_required']);
 
 /**
  * Marca el grupo en el store para no volver a intentar publicación tipo feed.
@@ -76,6 +80,15 @@ function markGroupNotMember(store, groupId) {
   const id = String(groupId);
   const next = groups.map((g) =>
     String(g.id) === id ? { ...g, membership: 'not_member' } : g
+  );
+  store.set('groups', next);
+}
+
+function markGroupPending(store, groupId) {
+  const groups = store.get('groups') || [];
+  const id = String(groupId);
+  const next = groups.map((g) =>
+    String(g.id) === id ? { ...g, membership: 'pending' } : g
   );
   store.set('groups', next);
 }
@@ -614,6 +627,8 @@ async function runRoundBody(accountId) {
         markGroupMembershipMarketplace(store, group.id);
       } else if (res.reason === 'not_member') {
         markGroupNotMember(store, group.id);
+      } else if (SKIP_PENDING_STORE_REASONS.has(res.reason)) {
+        markGroupPending(store, group.id);
       }
       writeLog('INFO', 'Scheduler: grupo saltado (sin publicar en esta ronda)', {
         groupId: group.id,

@@ -199,6 +199,11 @@
       hist_res_reason: '❌ {reason}',
       group_status_active: '✅ Activo',
       group_status_blocked: '❌ No disponible',
+      group_status_pending: '⏳ Solicitud pendiente',
+      group_status_not_member: '🚫 No eres miembro',
+      group_status_marketplace: '🛒 Solo compraventa',
+      group_status_unknown: '❔ Sin verificar',
+      btn_view_group: 'Ver grupo',
       group_members_na: '—',
       fb_section_title: 'Tu Cuenta de Facebook',
       fb_section_sub: 'Conecta la cuenta con la que quieres publicar en los grupos',
@@ -474,6 +479,11 @@
       hist_res_reason: '❌ {reason}',
       group_status_active: '✅ Active',
       group_status_blocked: '❌ Unavailable',
+      group_status_pending: '⏳ Request pending',
+      group_status_not_member: '🚫 Not a member',
+      group_status_marketplace: '🛒 Buy/sell only',
+      group_status_unknown: '❔ Not verified',
+      btn_view_group: 'View group',
       group_members_na: '—',
       fb_section_title: 'Your Facebook account',
       fb_section_sub: 'Connect the account you use to post in groups',
@@ -1350,10 +1360,29 @@
     return t('group_members_na');
   }
 
-  /** Etiqueta de estado de publicación en el grupo. */
+  /** Etiqueta de estado del grupo + botón "Ver grupo" cuando no eres miembro activo. */
   function formatGroupStatusCell(g) {
-    if (g.status === 'blocked') return `<span class="badge badge-group-off">${escapeHtml(t('group_status_blocked'))}</span>`;
-    return `<span class="badge badge-group-on">${escapeHtml(t('group_status_active'))}</span>`;
+    const m = g.membership || 'member';
+    let badge;
+    if (g.status === 'blocked') {
+      badge = `<span class="badge badge-group-off">${escapeHtml(t('group_status_blocked'))}</span>`;
+    } else if (m === 'pending') {
+      badge = `<span class="badge badge-pending">${escapeHtml(t('group_status_pending'))}</span>`;
+    } else if (m === 'not_member') {
+      badge = `<span class="badge badge-not-member">${escapeHtml(t('group_status_not_member'))}</span>`;
+    } else if (m === 'marketplace') {
+      badge = `<span class="badge badge-marketplace">${escapeHtml(t('group_status_marketplace'))}</span>`;
+    } else if (g.verifyStatus === 'unknown') {
+      badge = `<span class="badge badge-unknown">${escapeHtml(t('group_status_unknown'))}</span>`;
+    } else {
+      badge = `<span class="badge badge-group-on">${escapeHtml(t('group_status_active'))}</span>`;
+    }
+
+    const showViewBtn = m === 'pending' || m === 'not_member' || m === 'marketplace';
+    if (!showViewBtn) return badge;
+
+    const url = g.url || `https://www.facebook.com/groups/${g.id}`;
+    return `${badge} <button type="button" class="btn-view-group" data-action="view-group" data-url="${escapeHtml(url)}">${escapeHtml(t('btn_view_group'))}</button>`;
   }
 
   function renderGroupsList(groups) {
@@ -1378,13 +1407,21 @@
         </div>
         <div class="group-members-col">${formatGroupMembersCell(g)}</div>
         <div class="group-status-col">${formatGroupStatusCell(g)}</div>
-        <button class="btn btn-ghost btn-sm" data-idx="${idx}" type="button" aria-label="Eliminar">✕</button>`;
-      row.querySelector('button').onclick = async () => {
+        <button class="btn btn-ghost btn-sm" data-action="delete" data-idx="${idx}" type="button" aria-label="Eliminar">✕</button>`;
+      row.querySelector('[data-action="delete"]').onclick = async () => {
         const next = groups.filter((_, i) => i !== idx);
         await api.groupsSave(next);
         renderGroupsList(await api.groupsList());
         logLine(t('log_group_removed'));
       };
+      const viewBtn = row.querySelector('[data-action="view-group"]');
+      if (viewBtn) {
+        viewBtn.onclick = (e) => {
+          e.stopPropagation();
+          const url = viewBtn.getAttribute('data-url');
+          if (url) void api.openExternal(url);
+        };
+      }
       el.appendChild(row);
     });
   }
@@ -2161,11 +2198,17 @@
         const src = selected.find((s) => String(s.id) === String(v.id));
         const isUnknown = v.groupType === 'unknown';
         if (isUnknown) unknownCount += 1;
+        // Si la verificación detectó un estado de membresía concreto, usarlo
+        // (puede contradecir lo que decía la búsqueda si el grupo cambió desde entonces).
+        const verifiedMembership =
+          v.membershipState && v.membershipState !== 'unknown'
+            ? v.membershipState
+            : 'member';
         toAdd.push({
           id: v.id,
           name: v.name || src?.name || `Grupo ${v.id}`,
           status: 'active',
-          membership: 'member',
+          membership: verifiedMembership,
           ...(isUnknown ? { verifyStatus: 'unknown' } : {}),
           ...(src?.members ? { members: src.members } : {}),
         });
@@ -2190,7 +2233,7 @@
           merged[i] = {
             ...merged[i],
             name: item.name || merged[i].name,
-            membership: 'member',
+            membership: item.membership || 'member',
           };
         }
       }
@@ -2363,6 +2406,15 @@
         syncCampaignPanels(st);
       })();
       return;
+    }
+    // El scheduler acaba de actualizar la membresía de un grupo en el store
+    // (pending, not_member, marketplace). Refrescar la lista para mostrar el badge.
+    if (data.status === 'skipped' && data.skipDetail) {
+      void (async () => {
+        try {
+          renderGroupsList(await api.groupsList());
+        } catch { /* tab no visible */ }
+      })();
     }
     const bar = document.getElementById('campaign-round-progress-bar');
     const pctEl = document.getElementById('campaign-round-pct');

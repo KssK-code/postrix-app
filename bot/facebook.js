@@ -1107,39 +1107,78 @@ export async function publishInGroup(page, groupId, content) {
     return fail('marketplace_only_group');
   }
 
-  // Solicitud de ingreso pendiente: no intentar abrir compositor (evita timeout confuso)
-  const pendingApproval = await page.evaluate(() => {
+  // Detecta el estado de membresía antes de buscar el compositor.
+  // Orden de precedencia: questions_required > pending_approval > not_member.
+  // Devuelve la frase coincidente para logging estructurado.
+  const membershipDetect = await page.evaluate(() => {
     const bodyText = (document.body.innerText || '').toLowerCase();
-    return (
-      bodyText.includes('solicitud pendiente') ||
-      bodyText.includes('pending approval') ||
-      bodyText.includes('solicitud enviada') ||
-      bodyText.includes('request sent') ||
-      bodyText.includes('en espera de aprobación') ||
-      bodyText.includes('awaiting approval')
-    );
+    const find = (phrases) => phrases.find((p) => bodyText.includes(p)) || null;
+
+    // Muro de preguntas para entrar (debe responder antes de poder pedir unirse)
+    const questionsMatch = find([
+      'responder a las preguntas para unirte',
+      'responder preguntas para unirte',
+      'responde las preguntas para unirte',
+      'responder preguntas',
+      'responder las preguntas de membresía',
+      'answer questions to join',
+      'answer these questions to join',
+      'answer membership questions',
+      'answer questions',
+    ]);
+    if (questionsMatch) return { state: 'questions_required', matched: questionsMatch };
+
+    // Solicitud enviada — esperando aprobación del admin
+    const pendingMatch = find([
+      'tu solicitud está pendiente',
+      'your request is pending',
+      'solicitud pendiente',
+      'pending approval',
+      'solicitud enviada',
+      'request sent',
+      'en espera de aprobación',
+      'awaiting approval',
+      'cancelar solicitud',
+      'cancel request',
+    ]);
+    if (pendingMatch) return { state: 'pending_approval', matched: pendingMatch };
+
+    // No es miembro y aún no ha pedido entrar
+    const notMemberMatch = find([
+      'unirse al grupo',
+      'join group',
+      'join this group',
+      'únete al grupo',
+      'solicitar unirse',
+      'request to join',
+    ]);
+    if (notMemberMatch) return { state: 'not_member', matched: notMemberMatch };
+
+    return { state: 'member' };
   });
 
-  if (pendingApproval) {
-    console.log('[FB] ⚠️ Grupo con solicitud pendiente — no se publica');
-    return fail('pending_approval');
+  if (membershipDetect.state === 'questions_required') {
+    writeLog('WARN', '[FB] publishInGroup: grupo requiere responder preguntas para unirse', {
+      groupId,
+      matchedPhrase: membershipDetect.matched,
+    });
+    return fail('questions_required', membershipDetect.matched);
   }
 
-  // El usuario no es miembro: aparece botón "Unirse al grupo" / "Join group"
-  const notMember = await page.evaluate(() => {
-    const bodyText = (document.body.innerText || '').toLowerCase();
-    return (
-      bodyText.includes('unirse al grupo') ||
-      bodyText.includes('join group') ||
-      bodyText.includes('join this group') ||
-      bodyText.includes('únete al grupo') ||
-      bodyText.includes('solicitar unirse')
-    );
-  });
+  if (membershipDetect.state === 'pending_approval') {
+    writeLog('WARN', '[FB] publishInGroup: solicitud de membresía pendiente', {
+      groupId,
+      matchedPhrase: membershipDetect.matched,
+    });
+    return fail('pending_approval', membershipDetect.matched);
+  }
 
-  if (notMember) {
-    console.log('[FB] ⚠️ No eres miembro del grupo — botón "Unirse" detectado, saltando');
-    return fail('not_member');
+  if (membershipDetect.state === 'not_member') {
+    writeLog('WARN', '[FB] publishInGroup: no eres miembro del grupo', {
+      groupId,
+      matchedPhrase: membershipDetect.matched,
+    });
+    return fail('not_member', membershipDetect.matched);
   }
 
   // Mensajes de límite / spam de Facebook: pausar bot desde el planificador

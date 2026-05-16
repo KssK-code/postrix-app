@@ -23,12 +23,14 @@ function sleep(ms) {
 }
 
 /**
- * Visita la página del grupo y detecta si es solo compraventa o si hay compositor de publicación.
+ * Visita la página del grupo y detecta:
+ *  - Si es solo compraventa o si hay compositor de publicación.
+ *  - El estado de membresía: 'member' | 'pending' | 'not_member' | 'questions_required'.
  * En error de red o DOM, devuelve `{ unknown: true }` para que el caller no asuma compatible.
  *
  * @param {import('playwright').Page} page
  * @param {string} groupId
- * @returns {Promise<{ isMarketplaceOnly?: boolean, hasComposer?: boolean, unknown?: boolean, error?: string }>}
+ * @returns {Promise<{ isMarketplaceOnly?: boolean, hasComposer?: boolean, membershipState?: 'member' | 'pending' | 'not_member' | 'questions_required', matchedPhrase?: string, unknown?: boolean, error?: string }>}
  */
 export async function checkGroupType(page, groupId) {
   try {
@@ -66,9 +68,62 @@ export async function checkGroupType(page, groupId) {
           '[aria-label*="Create a post"]'
       );
 
+      // Membresía: mismo orden de precedencia que en publishInGroup
+      const bodyText = (document.body.innerText || '').toLowerCase();
+      const find = (phrases) => phrases.find((p) => bodyText.includes(p)) || null;
+
+      const questionsMatch = find([
+        'responder a las preguntas para unirte',
+        'responder preguntas para unirte',
+        'responde las preguntas para unirte',
+        'responder preguntas',
+        'responder las preguntas de membresía',
+        'answer questions to join',
+        'answer these questions to join',
+        'answer membership questions',
+        'answer questions',
+      ]);
+
+      const pendingMatch = find([
+        'tu solicitud está pendiente',
+        'your request is pending',
+        'solicitud pendiente',
+        'pending approval',
+        'solicitud enviada',
+        'request sent',
+        'en espera de aprobación',
+        'awaiting approval',
+        'cancelar solicitud',
+        'cancel request',
+      ]);
+
+      const notMemberMatch = find([
+        'unirse al grupo',
+        'join group',
+        'join this group',
+        'únete al grupo',
+        'solicitar unirse',
+        'request to join',
+      ]);
+
+      let membershipState = 'member';
+      let matchedPhrase = null;
+      if (questionsMatch) {
+        membershipState = 'questions_required';
+        matchedPhrase = questionsMatch;
+      } else if (pendingMatch) {
+        membershipState = 'pending';
+        matchedPhrase = pendingMatch;
+      } else if (notMemberMatch) {
+        membershipState = 'not_member';
+        matchedPhrase = notMemberMatch;
+      }
+
       return {
         isMarketplaceOnly: hasMarketplace && !hasConversation,
         hasComposer,
+        membershipState,
+        matchedPhrase,
       };
     });
 
@@ -202,11 +257,12 @@ export function loadGroups() {
 }
 
 /**
- * Comprueba en paralelo si cada grupo es solo compraventa (al añadir desde el modal, no durante la búsqueda).
+ * Comprueba en paralelo si cada grupo es solo compraventa Y su estado de membresía
+ * (al añadir desde el modal, no durante la búsqueda).
  *
  * @param {Array<{ id: string, name?: string }>} groups
  * @param {string} [accountId]
- * @returns {Promise<Array<{ id: string, name: string, groupType: 'compatible' | 'marketplace' }>>}
+ * @returns {Promise<Array<{ id: string, name: string, groupType: 'compatible' | 'marketplace' | 'unknown', membershipState: 'member' | 'pending' | 'not_member' | 'questions_required' | 'unknown', matchedPhrase?: string }>>}
  */
 export async function verifyMarketplaceForGroups(groups, accountId = 'default') {
   const list = (groups || []).filter((g) => g && g.id);
@@ -234,6 +290,8 @@ export async function verifyMarketplaceForGroups(groups, accountId = 'default') 
           ]);
 
           let groupType;
+          let membershipState = 'unknown';
+          let matchedPhrase;
           if (!typed || typed._timeout) {
             writeLog('WARN', 'verifyMarketplaceForGroups: timeout verificando grupo', {
               groupId: g.id,
@@ -243,16 +301,25 @@ export async function verifyMarketplaceForGroups(groups, accountId = 'default') 
           } else if (typed.unknown) {
             // checkGroupType ya logueó el error
             groupType = 'unknown';
-          } else if (typed.isMarketplaceOnly === true) {
-            groupType = 'marketplace';
           } else {
-            groupType = 'compatible';
+            groupType = typed.isMarketplaceOnly === true ? 'marketplace' : 'compatible';
+            membershipState = typed.membershipState || 'member';
+            matchedPhrase = typed.matchedPhrase || undefined;
+            if (membershipState !== 'member') {
+              writeLog('WARN', 'verifyMarketplaceForGroups: grupo sin membresía activa', {
+                groupId: g.id,
+                membershipState,
+                matchedPhrase,
+              });
+            }
           }
 
           resultMap.set(String(g.id), {
             id: g.id,
             name: g.name || `Grupo ${g.id}`,
             groupType,
+            membershipState,
+            ...(matchedPhrase ? { matchedPhrase } : {}),
           });
         }
       } finally {
@@ -270,6 +337,7 @@ export async function verifyMarketplaceForGroups(groups, accountId = 'default') 
           id: g.id,
           name: g.name || `Grupo ${g.id}`,
           groupType: 'unknown',
+          membershipState: 'unknown',
         });
       }
     }
@@ -281,6 +349,7 @@ export async function verifyMarketplaceForGroups(groups, accountId = 'default') 
     id: g.id,
     name: g.name || `Grupo ${g.id}`,
     groupType: 'unknown',
+    membershipState: 'unknown',
   });
 }
 
