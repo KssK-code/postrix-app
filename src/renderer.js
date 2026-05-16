@@ -2576,7 +2576,6 @@
   async function runCopyDiagnostics(btn) {
     if (btn) {
       btn.disabled = true;
-      btn.dataset.prevLabel = btn.textContent;
       btn.textContent = lang === 'es' ? '⏳ Recopilando...' : '⏳ Collecting...';
     }
     try {
@@ -2589,8 +2588,7 @@
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.textContent = btn.dataset.prevLabel || t('btn_copy_diagnostics');
-        delete btn.dataset.prevLabel;
+        btn.textContent = t('btn_copy_diagnostics');
       }
     }
   }
