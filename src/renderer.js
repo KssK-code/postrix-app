@@ -706,18 +706,21 @@
   function setView(name) {
     const act = document.getElementById('view-activation');
     const dash = document.getElementById('view-dashboard');
+    const helpFab = document.getElementById('btn-help-float');
     if (name === 'dashboard') {
       act.classList.add('hidden');
       act.classList.remove('fade-in');
       dash.classList.remove('hidden');
       void dash.offsetWidth;
       dash.classList.add('fade-in');
+      if (helpFab) helpFab.classList.remove('hidden');
     } else {
       dash.classList.add('hidden');
       dash.classList.remove('fade-in');
       act.classList.remove('hidden');
       void act.offsetWidth;
       act.classList.add('fade-in');
+      if (helpFab) helpFab.classList.add('hidden');
     }
   }
 
@@ -2055,6 +2058,37 @@
     });
     logLine(t('log_settings_saved'));
   }
+
+  // —— Modal de ayuda (PART 6) ——
+  (function initHelpModal() {
+    const fab = document.getElementById('btn-help-float');
+    const modal = document.getElementById('modal-help');
+    const closeBtn = document.getElementById('modal-help-close');
+    const backdrop = modal?.querySelector('.modal-backdrop');
+    if (!fab || !modal) return;
+
+    const openModal = () => {
+      modal.classList.remove('hidden');
+      // Mover foco al título para accesibilidad
+      const title = document.getElementById('modal-help-title');
+      if (title) {
+        title.setAttribute('tabindex', '-1');
+        title.focus();
+      }
+    };
+    const closeModal = () => {
+      modal.classList.add('hidden');
+      // Devolver foco al botón flotante
+      fab.focus();
+    };
+
+    fab.addEventListener('click', openModal);
+    closeBtn?.addEventListener('click', closeModal);
+    backdrop?.addEventListener('click', closeModal);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+    });
+  })();
 
   // Tabs
   document.querySelectorAll('.tab-btn').forEach((btn) => {
