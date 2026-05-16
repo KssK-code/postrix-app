@@ -2098,3 +2098,93 @@ button.preflight-item.is-clickable:focus-visible {
   color: #8b92a5;
   font-size: 13px;
 }
+
+/* —— Tooltips de ayuda contextual (PART 4) —— */
+.help-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent2);
+  background: rgba(0, 212, 255, 0.12);
+  border: 1px solid rgba(0, 212, 255, 0.5);
+  border-radius: 50%;
+  cursor: help;
+  user-select: none;
+  vertical-align: middle;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.help-tooltip:hover,
+.help-tooltip:focus-visible {
+  background: rgba(0, 212, 255, 0.22);
+  outline: none;
+  transform: scale(1.06);
+}
+
+.help-tooltip-bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: #cbd2e8;
+  background: #1a1f35;
+  border: 1px solid #2a3050;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.12s ease, visibility 0.12s ease;
+  z-index: 90;
+}
+
+.help-tooltip-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #1a1f35;
+}
+
+.help-tooltip:hover .help-tooltip-bubble,
+.help-tooltip:focus-visible .help-tooltip-bubble,
+.help-tooltip.is-open .help-tooltip-bubble {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* En la barra superior derecha del campo "hora fin": que el tooltip
+   no rompa el flex del label */
+.campaign-quick-label .help-tooltip {
+  vertical-align: middle;
+}
+
+/* Variante de posición: cuando el tooltip está cerca del borde derecho,
+   se ancla a la izquierda en vez de centrado */
+.help-tooltip--right .help-tooltip-bubble {
+  left: auto;
+  right: -4px;
+  transform: none;
+}
+
+.help-tooltip--right .help-tooltip-bubble::after {
+  left: auto;
+  right: 8px;
+  transform: none;
+}
