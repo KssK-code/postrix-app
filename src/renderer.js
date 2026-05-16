@@ -1433,14 +1433,10 @@
 
   /**
    * Decide la variante visual y el texto de la tarjeta de estado.
-   * Función pura: solo lee `botSt` y `data` (sin DOM, sin IPC).
+   * Función pura: solo lee sus argumentos (sin DOM, sin IPC).
    * Devuelve { variant, text } donde variant ∈ idle|ok|waiting|warn|error|paused.
    */
-  function pickCampaignStatus(botSt, data) {
-    const sessionExpired = !document
-      .getElementById('session-expired-alert')
-      ?.classList.contains('hidden');
-
+  function pickCampaignStatus(botSt, data, { sessionExpired = false } = {}) {
     // 1. Restricción Facebook activa
     if (botSt.restrictionActive && botSt.restrictionUntil) {
       const diff = Math.max(0, Number(botSt.restrictionUntil) - Date.now());
@@ -1458,8 +1454,8 @@
     // 3. Bot detenido
     if (!botSt.running) {
       const campaignStatus = data.campaign?.status || 'stopped';
-      // El usuario lo pausó/detuvo a propósito
-      if (campaignStatus === 'paused' || data.campaign?.session?.userStopped) {
+      // El usuario lo pausó a propósito (campaign.status queda en 'paused' si pausó antes de detener)
+      if (campaignStatus === 'paused') {
         return { variant: 'paused', text: t('status_stopped_voluntary') };
       }
       return { variant: 'idle', text: t('status_idle_not_started') };
@@ -1508,7 +1504,9 @@
     const card = document.getElementById('campaign-status-card');
     const msgEl = document.getElementById('campaign-status-card-msg');
     if (!card || !msgEl) return;
-    const { variant, text } = pickCampaignStatus(botSt, data);
+    const sessionAlertEl = document.getElementById('session-expired-alert');
+    const sessionExpired = !!sessionAlertEl && !sessionAlertEl.classList.contains('hidden');
+    const { variant, text } = pickCampaignStatus(botSt, data, { sessionExpired });
     const className = `campaign-status-card campaign-status-card--${variant}`;
     if (card.className !== className) card.className = className;
     if (msgEl.textContent !== text) msgEl.textContent = text;
