@@ -422,6 +422,73 @@
   <!-- Toasts de publicación exitosa (apilados) -->
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
+  <!-- Botón flotante de ayuda (PART 6) — visible siempre dentro del dashboard -->
+  <button id="btn-help-float" class="help-fab hidden" type="button" data-i18n-aria-label="help_fab_aria" aria-label="Abrir centro de ayuda" title="Ayuda">
+    <span class="help-fab-glyph" aria-hidden="true">?</span>
+    <span class="help-fab-label" data-i18n="help_fab_label">Ayuda</span>
+  </button>
+
+  <!-- Modal de ayuda (PART 6) -->
+  <div id="modal-help" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-help-title">
+    <div class="modal-backdrop" data-help-close="1"></div>
+    <div class="modal-card card-elevated modal-help-card">
+      <button id="modal-help-close" class="modal-help-close" type="button" aria-label="Cerrar">×</button>
+      <h3 id="modal-help-title" data-i18n="help_modal_title">Centro de ayuda</h3>
+      <p class="muted modal-help-intro" data-i18n="help_modal_intro"></p>
+
+      <section class="modal-help-section">
+        <h4 class="modal-help-section-title" data-i18n="faq_section_title">Preguntas frecuentes</h4>
+        <div id="modal-help-faq" class="faq-list">
+          <details class="faq-item">
+            <summary data-i18n="faq_q1">¿Por qué el bot no publica?</summary>
+            <p data-i18n="faq_a1"></p>
+          </details>
+          <details class="faq-item">
+            <summary data-i18n="faq_q2">¿Por qué algunos grupos aparecen en rojo o naranja?</summary>
+            <p data-i18n="faq_a2"></p>
+          </details>
+          <details class="faq-item">
+            <summary data-i18n="faq_q3">¿Cómo cambio el horario de publicación?</summary>
+            <p data-i18n="faq_a3"></p>
+          </details>
+          <details class="faq-item">
+            <summary data-i18n="faq_q4">¿Qué hago si Facebook me marca restricción?</summary>
+            <p data-i18n="faq_a4"></p>
+          </details>
+          <details class="faq-item">
+            <summary data-i18n="faq_q5">¿Qué significa "Solicitud pendiente" en un grupo?</summary>
+            <p data-i18n="faq_a5"></p>
+          </details>
+          <details class="faq-item">
+            <summary data-i18n="faq_q6">¿Cómo agrego más grupos?</summary>
+            <p data-i18n="faq_a6"></p>
+          </details>
+          <details class="faq-item">
+            <summary data-i18n="faq_q7">¿Puedo cambiar el mensaje mientras el bot está corriendo?</summary>
+            <p data-i18n="faq_a7"></p>
+          </details>
+          <details class="faq-item">
+            <summary data-i18n="faq_q8">¿Qué hago si la app se cierra sola?</summary>
+            <p data-i18n="faq_a8"></p>
+          </details>
+          <details class="faq-item">
+            <summary data-i18n="faq_q9">¿Cuántas publicaciones hace al día?</summary>
+            <p data-i18n="faq_a9"></p>
+          </details>
+          <details class="faq-item">
+            <summary data-i18n="faq_q10">¿Qué hago si nada funciona?</summary>
+            <p data-i18n="faq_a10"></p>
+          </details>
+        </div>
+      </section>
+
+      <section class="modal-help-section modal-help-diag">
+        <p class="muted modal-help-diag-hint" data-i18n="help_copy_diagnostics_hint"></p>
+        <button id="btn-copy-diagnostics-modal" class="btn btn-secondary" type="button" data-i18n="btn_copy_diagnostics">📋 Copiar diagnóstico</button>
+      </section>
+    </div>
+  </div>
+
   <script src="renderer.js"></script>
 </body>
 </html>
