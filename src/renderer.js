@@ -686,6 +686,10 @@
       const k = el.getAttribute('data-i18n-placeholder');
       if (STR[lang][k]) el.setAttribute('placeholder', STR[lang][k]);
     });
+    document.querySelectorAll('[data-i18n-aria-label]').forEach((el) => {
+      const k = el.getAttribute('data-i18n-aria-label');
+      if (STR[lang][k]) el.setAttribute('aria-label', STR[lang][k]);
+    });
   }
 
   /** Mensajes de actividad legibles (sin jerga técnica). */

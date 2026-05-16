@@ -2188,3 +2188,14 @@ button.preflight-item.is-clickable:focus-visible {
   right: 8px;
   transform: none;
 }
+
+.btn-with-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-with-tooltip .btn {
+  flex: 1 1 auto;
+}
