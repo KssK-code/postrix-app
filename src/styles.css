@@ -829,6 +829,23 @@ select.input {
   opacity: 0.65;
 }
 
+.content-slot.slot-needs-activation {
+  opacity: 1;
+  border-color: rgba(245, 158, 11, 0.55);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25) inset;
+}
+
+.slot-activate-hint {
+  margin: 4px 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
 .slot-head {
   display: flex;
   align-items: center;

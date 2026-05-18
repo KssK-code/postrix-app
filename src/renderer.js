@@ -75,10 +75,16 @@
       preflight_groups_sub_ok_one: '1 grupo en tu lista',
       preflight_groups_sub_ok_n: '{n} grupos en tu lista',
       preflight_groups_sub_fail: 'Aún no agregas ningún grupo',
+      preflight_groups_sub_unknown:
+        '⚠️ {x} de {y} grupos están pendientes de verificar. Ve a Mis Grupos y verifícalos.',
+      preflight_groups_sub_nonmember:
+        '⚠️ {x} de {y} grupos no aceptan publicaciones (solicitud pendiente, solo compraventa, o no eres miembro). Revísalos en Mis Grupos.',
       preflight_post_label: 'Publicación activa',
       preflight_post_sub_ok_one: '1 versión activa',
       preflight_post_sub_ok_n: '{n} versiones activas',
       preflight_post_sub_fail: 'No tienes publicaciones activas',
+      preflight_post_sub_inactive:
+        '⚠️ Tienes {n} versión(es) con contenido pero sin marcar como Activa. Ve a Mi Publicación.',
       preflight_hours_label: 'Dentro del horario',
       preflight_hours_sub_ok: 'Horario configurado: {start} – {end}',
       preflight_hours_sub_outside:
@@ -159,6 +165,8 @@
       slot_version: 'Versión {n}',
       slot_active: 'Activa',
       slot_inactive: 'Inactiva',
+      slot_activate_hint:
+        '👉 Marca esta versión como Activa para que el bot la incluya en la rotación.',
       slot_msg_label: 'Tu mensaje:',
       slot_msg_placeholder: 'Escribe aquí lo que quieres publicar en los grupos…',
       slot_img_label: 'Tu imagen:',
@@ -406,10 +414,16 @@
       preflight_groups_sub_ok_one: '1 group on your list',
       preflight_groups_sub_ok_n: '{n} groups on your list',
       preflight_groups_sub_fail: "You haven't added any group yet",
+      preflight_groups_sub_unknown:
+        '⚠️ {x} of {y} groups are pending verification. Go to My Groups and verify them.',
+      preflight_groups_sub_nonmember:
+        "⚠️ {x} of {y} groups don't accept posts (request pending, marketplace only, or not a member). Review them in My Groups.",
       preflight_post_label: 'Active post',
       preflight_post_sub_ok_one: '1 active version',
       preflight_post_sub_ok_n: '{n} active versions',
       preflight_post_sub_fail: 'No active posts',
+      preflight_post_sub_inactive:
+        "⚠️ You have {n} version(s) with content but not marked Active. Go to My Post.",
       preflight_hours_label: 'Within posting hours',
       preflight_hours_sub_ok: 'Schedule: {start} – {end}',
       preflight_hours_sub_outside:
@@ -488,6 +502,8 @@
       slot_version: 'Version {n}',
       slot_active: 'On',
       slot_inactive: 'Off',
+      slot_activate_hint:
+        '👉 Mark this version as Active so the bot includes it in the rotation.',
       slot_msg_label: 'Your message:',
       slot_msg_placeholder: 'Write what you want to post in the groups…',
       slot_img_label: 'Your image:',
@@ -784,10 +800,16 @@
 
   function canStartCampaign(data) {
     if (!isFacebookConnected(data)) return false;
-    if (!(data.groups || []).length) return false;
+    const eligibleGroups = (data.groups || []).filter(
+      (g) =>
+        g.status === 'active' &&
+        g.membership === 'member' &&
+        g.verifyStatus !== 'unknown'
+    );
+    if (!eligibleGroups.length) return false;
     const slots = data.contentSlots || [];
     return slots.some(
-      (s) => s.active && String(s.text || '').trim().length > 0
+      (s) => s.active && (String(s.text || '').trim().length > 0 || s.imagePath)
     );
   }
 
@@ -799,11 +821,23 @@
     if (!itemsEl) return;
 
     const fbOk = isFacebookConnected(data);
-    const nGroups = (data.groups || []).length;
-    const groupsOk = nGroups >= 1;
+
+    const allGroups = data.groups || [];
+    const nGroups = allGroups.length;
+    const memberGroups = allGroups.filter(
+      (g) => g.status === 'active' && g.membership === 'member'
+    );
+    const eligibleGroups = memberGroups.filter((g) => g.verifyStatus !== 'unknown');
+    const nUnknown = memberGroups.length - eligibleGroups.length;
+    const nNonMember = allGroups.length - memberGroups.length;
+    const groupsOk = eligibleGroups.length >= 1;
+
     const slots = data.contentSlots || [];
     const nVers = slots.filter(
-      (s) => s.active && String(s.text || '').trim().length > 0
+      (s) => s.active && (String(s.text || '').trim().length > 0 || s.imagePath)
+    ).length;
+    const nInactiveWithContent = slots.filter(
+      (s) => !s.active && (String(s.text || '').trim().length > 0 || s.imagePath)
     ).length;
     const postOk = nVers >= 1;
 
@@ -827,10 +861,37 @@
       nVers > 1
         ? t('preflight_post_sub_ok_n').replace('{n}', String(nVers))
         : t('preflight_post_sub_ok_one');
+    const nEligible = eligibleGroups.length;
     const groupsSubOk =
-      nGroups > 1
-        ? t('preflight_groups_sub_ok_n').replace('{n}', String(nGroups))
+      nEligible > 1
+        ? t('preflight_groups_sub_ok_n').replace('{n}', String(nEligible))
         : t('preflight_groups_sub_ok_one');
+
+    let groupsSub;
+    if (groupsOk) {
+      groupsSub = groupsSubOk;
+    } else if (nGroups === 0) {
+      groupsSub = t('preflight_groups_sub_fail');
+    } else if (nUnknown > 0) {
+      groupsSub = t('preflight_groups_sub_unknown')
+        .replace('{x}', String(nUnknown))
+        .replace('{y}', String(nGroups));
+    } else if (nNonMember > 0) {
+      groupsSub = t('preflight_groups_sub_nonmember')
+        .replace('{x}', String(nNonMember))
+        .replace('{y}', String(nGroups));
+    } else {
+      groupsSub = t('preflight_groups_sub_fail');
+    }
+
+    let postSub;
+    if (postOk) {
+      postSub = postSubOk;
+    } else if (nInactiveWithContent > 0) {
+      postSub = t('preflight_post_sub_inactive').replace('{n}', String(nInactiveWithContent));
+    } else {
+      postSub = t('preflight_post_sub_fail');
+    }
 
     const rows = [
       {
@@ -845,7 +906,7 @@
         key: 'groups',
         ok: groupsOk,
         label: t('preflight_groups_label'),
-        sub: groupsOk ? groupsSubOk : t('preflight_groups_sub_fail'),
+        sub: groupsSub,
         actionTab: 'groups',
         blocking: true,
       },
@@ -853,7 +914,7 @@
         key: 'post',
         ok: postOk,
         label: t('preflight_post_label'),
-        sub: postOk ? postSubOk : t('preflight_post_sub_fail'),
+        sub: postSub,
         actionTab: 'content',
         blocking: true,
       },
@@ -1821,15 +1882,24 @@
     wrap.innerHTML = '';
     (slots || []).forEach((slot, i) => {
       const div = document.createElement('div');
-      div.className = 'content-slot card-elevated' + (slot.active ? '' : ' inactive');
+      const hasContent = String(slot.text || '').trim().length > 0 || !!slot.imagePath;
+      const showActivateHint = !slot.active && hasContent;
+      div.className =
+        'content-slot card-elevated' +
+        (slot.active ? '' : ' inactive') +
+        (showActivateHint ? ' slot-needs-activation' : '');
       const ver = t('slot_version').replace('{n}', String(i + 1));
       const activeLabel = slot.active ? t('slot_active') : t('slot_inactive');
       const noImgLabel = escapeHtml(t('slot_no_image'));
+      const hintHtml = showActivateHint
+        ? `<div class="slot-activate-hint" role="status">${escapeHtml(t('slot_activate_hint'))}</div>`
+        : '';
       div.innerHTML = `
         <div class="slot-head">
           <strong>${escapeHtml(ver)}</strong>
           <label class="slot-toggle"><input type="checkbox" class="slot-active" ${slot.active ? 'checked' : ''}/> <span class="slot-toggle-text">${escapeHtml(activeLabel)}</span></label>
         </div>
+        ${hintHtml}
         <p class="slot-field-label">${escapeHtml(t('slot_msg_label'))}</p>
         <textarea class="textarea slot-text" rows="5" placeholder="${escapeHtml(t('slot_msg_placeholder'))}">${escapeHtml(slot.text || '')}</textarea>
         <p class="slot-field-label">${escapeHtml(t('slot_img_label'))}</p>
@@ -2287,6 +2357,16 @@
           showBotInfoBanner(
             lang === 'es' ? '⚠️ Facebook no conectado' : '⚠️ Facebook not connected',
             t('bot_info_no_cookies')
+          );
+        } else if (res.reason === 'no_active_content') {
+          showBotInfoBanner(
+            lang === 'es' ? '⚠️ Sin publicación activa' : '⚠️ No active post',
+            res.error
+          );
+        } else if (res.reason === 'no_eligible_groups') {
+          showBotInfoBanner(
+            lang === 'es' ? '⚠️ Grupos no elegibles' : '⚠️ Groups not eligible',
+            res.error
           );
         } else {
           showBotInfoBanner(

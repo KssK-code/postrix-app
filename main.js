@@ -100,8 +100,6 @@ function migrateCriticalStoreRules() {
   console.log('[MAIN] campaign.session reseteado a valores por defecto');
 }
 
-process.env.APP_VERSION = process.env.APP_VERSION || '1.0.0';
-
 let mainWindow = null;
 
 function createWindow() {
@@ -220,7 +218,7 @@ function setupAutoUpdater() {
 
 app.whenReady().then(async () => {
   initLogger(app.getPath('userData'));
-  writeLog('INFO', 'Postrix iniciando', { version: process.env.APP_VERSION });
+  writeLog('INFO', 'Postrix iniciando', { version: app.getVersion() });
 
   migrateCriticalStoreRules();
 
@@ -442,9 +440,6 @@ app.whenReady().then(async () => {
         };
       }
 
-      const groups = store.get('groups') || [];
-      console.log('[MAIN] Grupos en store:', groups.length);
-
       // Validación de cookies antes de abrir Chromium (evita arranque inútil)
       const rawCookies = store.get('fb_session_cookies');
       let cookiesValid = false;
@@ -472,7 +467,61 @@ app.whenReady().then(async () => {
       }
 
       const slots = store.get('contentSlots') || [];
-      console.log('[MAIN] Slots contenido:', slots.length);
+      const activeSlots = slots.filter((s) => s.active && (s.text || s.imagePath));
+      console.log('[MAIN] Slots contenido:', slots.length, 'activos con contenido:', activeSlots.length);
+
+      if (!activeSlots.length) {
+        const msg = 'No tienes publicaciones activas con contenido. Ve a "Mi Publicación" y activa al menos una versión con texto o imagen.';
+        writeLog('WARN', '[MAIN] bot:start abortado — sin publicaciones activas', {
+          accountId,
+          totalSlots: slots.length,
+          activeWithContent: activeSlots.length,
+        });
+        broadcast('bot:status', { status: 'stopped' });
+        return {
+          ...getSchedulerState(),
+          ok: false,
+          error: msg,
+          reason: 'no_active_content',
+          totalSlots: slots.length,
+          activeWithContent: 0,
+        };
+      }
+
+      const allGroups = store.get('groups') || [];
+      const memberGroups = allGroups.filter((g) => g.status === 'active' && g.membership === 'member');
+      const eligibleGroups = memberGroups.filter((g) => g.verifyStatus !== 'unknown');
+      const unknownCount = memberGroups.length - eligibleGroups.length;
+      const nonMemberCount = allGroups.length - memberGroups.length;
+      console.log('[MAIN] Grupos:', allGroups.length, 'miembros:', memberGroups.length, 'elegibles:', eligibleGroups.length);
+
+      if (!eligibleGroups.length) {
+        const msg = unknownCount > 0
+          ? `${unknownCount} de ${allGroups.length} grupos están pendientes de verificación. Ve a "Mis Grupos" y verifícalos.`
+          : nonMemberCount > 0
+            ? `Ninguno de tus ${allGroups.length} grupos acepta publicaciones (solicitud pendiente, solo compraventa, o no eres miembro). Revísalos en "Mis Grupos".`
+            : 'No hay grupos para publicar. Agrega al menos un grupo en "Mis Grupos".';
+        writeLog('WARN', '[MAIN] bot:start abortado — sin grupos elegibles', {
+          accountId,
+          totalGroups: allGroups.length,
+          memberGroups: memberGroups.length,
+          eligibleGroups: eligibleGroups.length,
+          unknownCount,
+          nonMemberCount,
+        });
+        broadcast('bot:status', { status: 'stopped' });
+        return {
+          ...getSchedulerState(),
+          ok: false,
+          error: msg,
+          reason: 'no_eligible_groups',
+          totalGroups: allGroups.length,
+          memberGroups: memberGroups.length,
+          eligibleGroups: eligibleGroups.length,
+          unknownCount,
+          nonMemberCount,
+        };
+      }
 
       store.set('campaign', { ...(store.get('campaign') || {}), status: 'running' });
 
