@@ -1,7 +1,7 @@
 {
   "name": "postrix-app",
   "productName": "Postrix by Solvix",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Postrix by Solvix - Publicación masiva en grupos de Facebook",
   "author": "Solvix",
   "main": "main.js",
@@ -81,7 +81,8 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Postrix by Solvix",
       "installerIcon": "assets/icon.ico",
-      "uninstallerIcon": "assets/icon.ico"
+      "uninstallerIcon": "assets/icon.ico",
+      "artifactName": "Postrix-by-Solvix-Setup.exe"
     }
   }
 }
