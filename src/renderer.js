@@ -144,17 +144,10 @@
       groups_title: 'Mis Grupos de Facebook',
       groups_subtitle: 'Agrega los grupos donde quieres publicar',
       groups_how_title: '¿Cómo agregar grupos?',
-      groups_how_opt1: 'Opción 1: Busca por tema 🔍',
-      groups_how_opt2: 'Opción 2: Pega el link del grupo 🔗',
+      groups_how_desc:
+        'Busca por palabras clave relacionadas al tema de tus grupos (ejemplo: "ventas guadalajara"). Postrix te mostrará todos los grupos donde ya eres miembro activo, con su nombre real y verificados. Selecciona los que quieras agregar.',
       btn_search_groups_big: '🔍 Buscar grupos por tema',
-      btn_add_by_link: '🔗 Agregar grupo por link',
-      label_paste_links: 'Pega aquí el link del grupo',
-      placeholder_group_urls:
-        'Pega aquí el link del grupo de Facebook\nEj: https://www.facebook.com/groups/ventas-gdl',
-      btn_extract: 'Agregar a la lista',
       btn_search_groups: 'Buscar grupos',
-      btn_import: 'Importar .txt',
-      btn_export: 'Exportar lista',
       groups_total_line: 'Tienes',
       groups_total_of: 'grupos · Máximo',
       content_title: 'Mi Publicación',
@@ -211,6 +204,15 @@
       group_status_not_member: '🚫 No eres miembro',
       group_status_marketplace: '🛒 Solo compraventa',
       group_status_unknown: '❔ Sin verificar',
+      group_status_unverified: '⚠️ No verificado',
+      group_unverified_subtext:
+        'Para que el bot publique aquí, vuelve a agregarlo desde "Buscar grupos por tema"',
+      btn_remove_and_research: 'Eliminar y re-agregar buscando',
+      btn_remove: '✕ Eliminar',
+      confirm_remove_legacy:
+        '¿Eliminar este grupo? Después podrás volver a agregarlo desde "Buscar grupos por tema".',
+      toast_legacy_removed:
+        'Grupo eliminado. Busca por tema para agregarlo verificado.',
       btn_view_group: 'Ver grupo',
       group_members_na: '—',
       fb_section_title: 'Tu Cuenta de Facebook',
@@ -312,7 +314,6 @@
       tip_groups_per_round: 'Grupos por vuelta. Empieza con 20.',
       tip_fb_connect: 'Necesario para que el bot pueda publicar.',
       tip_search_groups: 'Encuentra grupos por palabras clave.',
-      tip_add_by_link: 'Pega la URL directa de un grupo.',
       tip_aria_label: 'Ayuda sobre este campo',
       // —— Tarjeta de estado "¿Qué está pasando?" (PART 5) ——
       status_card_title: '¿Qué está pasando?',
@@ -342,7 +343,7 @@
       faq_q5: '¿Qué significa "Solicitud pendiente" en un grupo?',
       faq_a5: 'Aún no eres miembro: enviaste solicitud y el admin no la aprueba. El bot saltará ese grupo hasta que entres. Puedes darle "Ver grupo" para revisarlo en Facebook.',
       faq_q6: '¿Cómo agrego más grupos?',
-      faq_a6: 'Ve a Mis Grupos y usa "Buscar grupos por tema" o "Agregar grupo por link". El máximo son 80 grupos por campaña.',
+      faq_a6: 'Ve a Mis Grupos y usa "Buscar grupos por tema". Postrix encuentra los grupos donde ya eres miembro y los agrega verificados. El máximo son 80 grupos por campaña.',
       faq_q7: '¿Puedo cambiar el mensaje mientras el bot está corriendo?',
       faq_a7: 'Sí. Ve a Mi Publicación, edita la versión y guarda. El bot tomará el mensaje nuevo en la siguiente ronda. Las publicaciones ya hechas no se modifican.',
       faq_q8: '¿Qué hago si la app se cierra sola?',
@@ -482,17 +483,10 @@
       groups_title: 'My Facebook Groups',
       groups_subtitle: 'Add the groups where you want to post',
       groups_how_title: 'How to add groups?',
-      groups_how_opt1: 'Option 1: Search by topic 🔍',
-      groups_how_opt2: 'Option 2: Paste the group link 🔗',
+      groups_how_desc:
+        'Search by keywords related to your groups\' topic (e.g. "sales new york"). Postrix will show all groups where you are already an active member, with their real name and verified. Select the ones you want to add.',
       btn_search_groups_big: '🔍 Search groups by topic',
-      btn_add_by_link: '🔗 Add group by link',
-      label_paste_links: 'Paste the group link here',
-      placeholder_group_urls:
-        'Paste your Facebook group link here\nE.g. https://www.facebook.com/groups/sales-nyc',
-      btn_extract: 'Add to list',
       btn_search_groups: 'Search groups',
-      btn_import: 'Import .txt',
-      btn_export: 'Export list',
       groups_total_line: 'You have',
       groups_total_of: 'groups · Max',
       content_title: 'My Post',
@@ -545,6 +539,15 @@
       group_status_not_member: '🚫 Not a member',
       group_status_marketplace: '🛒 Buy/sell only',
       group_status_unknown: '❔ Not verified',
+      group_status_unverified: '⚠️ Not verified',
+      group_unverified_subtext:
+        'For the bot to post here, re-add it from "Search groups by topic"',
+      btn_remove_and_research: 'Remove and re-add by searching',
+      btn_remove: '✕ Remove',
+      confirm_remove_legacy:
+        'Remove this group? You can re-add it later from "Search groups by topic".',
+      toast_legacy_removed:
+        'Group removed. Search by topic to add it verified.',
       btn_view_group: 'View group',
       group_members_na: '—',
       fb_section_title: 'Your Facebook account',
@@ -646,7 +649,6 @@
       tip_groups_per_round: 'Groups per round. Start with 20.',
       tip_fb_connect: 'Required for the bot to be able to post.',
       tip_search_groups: 'Find groups by keywords.',
-      tip_add_by_link: 'Paste the direct URL of a group.',
       tip_aria_label: 'Help about this field',
       // —— Status card "What's happening?" (PART 5) ——
       status_card_title: "What's happening?",
@@ -676,7 +678,7 @@
       faq_q5: 'What does "Pending request" on a group mean?',
       faq_a5: "You aren't a member yet: you sent a request and the admin hasn't approved it. The bot will skip that group until you're in. You can press \"View group\" to check it on Facebook.",
       faq_q6: 'How do I add more groups?',
-      faq_a6: 'Go to My Groups and use "Search groups by topic" or "Add group by link". The maximum is 80 groups per campaign.',
+      faq_a6: 'Go to My Groups and use "Search groups by topic". Postrix finds groups where you are already a member and adds them verified. The maximum is 80 groups per campaign.',
       faq_q7: 'Can I change the message while the bot is running?',
       faq_a7: 'Yes. Go to My Post, edit the version and save. The bot will take the new message on the next round. Posts already made are not modified.',
       faq_q8: 'What do I do if the app closes by itself?',
@@ -1662,12 +1664,23 @@
     return t('group_members_na');
   }
 
+  /**
+   * Grupos heredados del flujo viejo "Agregar por link": nombre placeholder
+   * `Grupo {id}` + membership 'pending' por defecto (parseUrlsFromText nunca
+   * verificó membresía real). Se distinguen del pending legítimo (búsqueda).
+   */
+  function isLegacyUnverified(g) {
+    return g.membership === 'pending' && g.name === `Grupo ${g.id}`;
+  }
+
   /** Etiqueta de estado del grupo + botón "Ver grupo" cuando no eres miembro activo. */
   function formatGroupStatusCell(g) {
     const m = g.membership || 'member';
     let badge;
     if (g.status === 'blocked') {
       badge = `<span class="badge badge-group-off">${escapeHtml(t('group_status_blocked'))}</span>`;
+    } else if (isLegacyUnverified(g)) {
+      badge = `<span class="badge badge-unverified">${escapeHtml(t('group_status_unverified'))}</span>`;
     } else if (m === 'pending') {
       badge = `<span class="badge badge-pending">${escapeHtml(t('group_status_pending'))}</span>`;
     } else if (m === 'not_member') {
@@ -1680,7 +1693,10 @@
       badge = `<span class="badge badge-group-on">${escapeHtml(t('group_status_active'))}</span>`;
     }
 
-    const showViewBtn = m === 'pending' || m === 'not_member' || m === 'marketplace';
+    // Los legacy unverified ya muestran su propio panel debajo — no añadir "Ver grupo"
+    const showViewBtn =
+      !isLegacyUnverified(g) &&
+      (m === 'pending' || m === 'not_member' || m === 'marketplace');
     if (!showViewBtn) return badge;
 
     const url = g.url || `https://www.facebook.com/groups/${g.id}`;
@@ -1701,21 +1717,81 @@
 
     groups.forEach((g, idx) => {
       const row = document.createElement('div');
-      row.className = 'group-row';
-      row.innerHTML = `
+      const isLegacy = isLegacyUnverified(g);
+      row.className = isLegacy ? 'group-row group-row-legacy' : 'group-row';
+
+      const removeAtIdx = async () => {
+        const next = groups.filter((_, i) => i !== idx);
+        await api.groupsSave(next);
+        renderGroupsList(await api.groupsList());
+      };
+
+      // Para legacy, el ✕ del row se oculta — los botones del panel lo reemplazan.
+      const topRow = `
         <div class="group-meta">
           <div class="group-name">${escapeHtml(g.name || '')}</div>
           <div class="group-id muted">${escapeHtml(g.id)}</div>
         </div>
         <div class="group-members-col">${formatGroupMembersCell(g)}</div>
         <div class="group-status-col">${formatGroupStatusCell(g)}</div>
-        <button class="btn btn-ghost btn-sm" data-action="delete" data-idx="${idx}" type="button" aria-label="Eliminar">✕</button>`;
-      row.querySelector('[data-action="delete"]').onclick = async () => {
-        const next = groups.filter((_, i) => i !== idx);
-        await api.groupsSave(next);
-        renderGroupsList(await api.groupsList());
-        logLine(t('log_group_removed'));
-      };
+        ${
+          isLegacy
+            ? '<span class="group-row-delete-placeholder" aria-hidden="true"></span>'
+            : `<button class="btn btn-ghost btn-sm" data-action="delete" data-idx="${idx}" type="button" aria-label="Eliminar">✕</button>`
+        }`;
+
+      const legacyPanel = isLegacy
+        ? `
+        <div class="group-legacy-panel">
+          <p class="group-legacy-text muted">${escapeHtml(t('group_unverified_subtext'))}</p>
+          <div class="group-legacy-actions">
+            <button class="btn btn-primary btn-sm" data-action="remove-and-research" type="button">${escapeHtml(t('btn_remove_and_research'))}</button>
+            <button class="btn btn-ghost btn-sm" data-action="legacy-remove" type="button">${escapeHtml(t('btn_remove'))}</button>
+          </div>
+        </div>`
+        : '';
+
+      row.innerHTML = topRow + legacyPanel;
+
+      const deleteBtn = row.querySelector('[data-action="delete"]');
+      if (deleteBtn) {
+        deleteBtn.onclick = async () => {
+          await removeAtIdx();
+          logLine(t('log_group_removed'));
+        };
+      }
+
+      const legacyRemoveBtn = row.querySelector('[data-action="legacy-remove"]');
+      if (legacyRemoveBtn) {
+        legacyRemoveBtn.onclick = async () => {
+          await removeAtIdx();
+          logLine(t('log_group_removed'));
+        };
+      }
+
+      const removeAndResearchBtn = row.querySelector('[data-action="remove-and-research"]');
+      if (removeAndResearchBtn) {
+        removeAndResearchBtn.onclick = async () => {
+          if (!window.confirm(t('confirm_remove_legacy'))) return;
+          await removeAtIdx();
+          showToastInfo(t('toast_legacy_removed'));
+          const searchModal = document.getElementById('modal-search');
+          if (searchModal) {
+            searchModal.classList.remove('hidden');
+            const st = document.getElementById('modal-search-status');
+            if (st) st.textContent = '';
+            const prog = document.getElementById('searchProgress');
+            const progBar = document.getElementById('searchProgressBar');
+            if (prog) prog.style.display = 'none';
+            if (progBar) progBar.style.width = '0%';
+            setTimeout(() => {
+              const input = document.getElementById('modal-search-input');
+              if (input) input.focus();
+            }, 50);
+          }
+        };
+      }
+
       const viewBtn = row.querySelector('[data-action="view-group"]');
       if (viewBtn) {
         viewBtn.onclick = (e) => {
@@ -2204,13 +2280,6 @@
   document.getElementById('btn-welcome-content').onclick = () => {
     document.querySelector('[data-tab="content"]').click();
   };
-  document.getElementById('btn-focus-links').onclick = () => {
-    document.querySelector('[data-tab="groups"]').click();
-    setTimeout(() => {
-      const ta = document.getElementById('groups-urls');
-      if (ta) ta.focus();
-    }, 100);
-  };
 
   document.getElementById('btn-lang').onclick = async () => {
     lang = lang === 'es' ? 'en' : 'es';
@@ -2401,20 +2470,6 @@
   };
 
   // Grupos
-  document.getElementById('btn-extract-ids').onclick = async () => {
-    const text = document.getElementById('groups-urls').value;
-    const res = await api.groupsExtractIds(text);
-    renderGroupsList(await api.groupsList());
-    logLine(t('log_groups_added'));
-  };
-  document.getElementById('btn-import-txt').onclick = async () => {
-    const list = await api.groupsImportTxt();
-    if (list) renderGroupsList(list);
-  };
-  document.getElementById('btn-export-txt').onclick = async () => {
-    await api.groupsExportTxt();
-  };
-
   const modal = document.getElementById('modal-search');
   document.getElementById('btn-search-groups').onclick = () => {
     modal.classList.remove('hidden');

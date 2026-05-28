@@ -694,6 +694,54 @@ select.input {
   border: 1px solid rgba(255, 217, 61, 0.28);
 }
 
+/* Badge amarillo (#FFC107) — grupos legacy del flujo viejo "Agregar por link" */
+.badge-unverified {
+  background: rgba(255, 193, 7, 0.14);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.40);
+}
+
+/* Fila de grupo legacy: dos filas (datos + panel de aviso). */
+.group-row-legacy {
+  grid-template-rows: auto auto;
+  border-color: rgba(255, 193, 7, 0.30);
+  background: linear-gradient(
+    0deg,
+    rgba(255, 193, 7, 0.04),
+    rgba(255, 193, 7, 0.04)
+  ), var(--surface);
+}
+
+.group-row-delete-placeholder {
+  display: block;
+}
+
+.group-legacy-panel {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-top: 8px;
+  background: rgba(255, 193, 7, 0.06);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 193, 7, 0.18);
+}
+
+.group-legacy-text {
+  flex: 1 1 200px;
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.group-legacy-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
 /* Botón pequeño "Ver grupo" junto al badge */
 .btn-view-group {
   background: transparent;
