@@ -715,11 +715,19 @@ export async function checkFacebookSession(accountId = 'default') {
 
   let browser = null;
   try {
+    /**
+     * headless: false — igualamos las condiciones del login (connect), que
+     * SIEMPRE pinta la UI completa de Facebook. Aun con
+     * --disable-blink-features=AutomationControlled, en headless FB puede no
+     * renderizar [role="feed"]/LeftRail y el Filtro B devolvía falsos
+     * session_expired (bucle visto en la PC de una clienta). Visible = misma
+     * garantía que el login que ya funciona. slowMo: 0 porque el check es solo
+     * lectura (no hay tipeo humano que simular).
+     */
     browser = await chromium.launch({
-      headless: true,
-      timeout: 60_000,
-      args: ['--no-sandbox', '--disable-dev-shm-usage'],
-      ...(BUNDLED_CHROME ? { executablePath: BUNDLED_CHROME } : {}),
+      ...getChromiumConnectLaunchOptions(),
+      headless: false,
+      slowMo: 0,
     });
     const context = await browser.newContext({
       userAgent:
@@ -735,7 +743,9 @@ export async function checkFacebookSession(accountId = 'default') {
       waitUntil: 'domcontentloaded',
       timeout: 20_000,
     });
-    await sleep(2000);
+    // La home de FB hidrata el feed/rail de forma asíncrona: damos margen
+    // (antes 2s, insuficiente sobre todo headless) antes de evaluar el Filtro B.
+    await sleep(5000);
 
     const url = page.url().toLowerCase();
     const redirectedToLogin =
@@ -750,7 +760,13 @@ export async function checkFacebookSession(accountId = 'default') {
       return { ok: false, reason: 'session_expired' };
     }
 
-    // Confirmar elementos exclusivos de sesión autenticada
+    // Confirmar elementos exclusivos de sesión autenticada.
+    // OR, NUNCA AND: el bug original era un falso session_expired por exceso de
+    // estrictez; un AND lo reintroduciría. Marcadores estructurales
+    // (idioma-independientes) primero, texto como refuerzo.
+    // Se quitaron [role="feed"] y [data-pagelet="LeftRail"]: FB eliminó los
+    // pagelets del home (dataPagelets:[] confirmado en diagnóstico read-only del
+    // 22-jun-2026) y el feed ya no se envuelve en [role="feed"]. No reponerlos.
     const isLoggedIn = await page.evaluate(() => {
       const u = window.location.href.toLowerCase();
       if (
@@ -759,10 +775,12 @@ export async function checkFacebookSession(accountId = 'default') {
         u.includes('/checkpoint/')
       ) return false;
       return !!(
-        document.querySelector('[role="feed"]') ||
-        document.querySelector('[data-pagelet="LeftRail"]') ||
+        document.querySelector('[role="banner"]') ||
         document.querySelector('[role="navigation"]') ||
-        document.querySelector('[aria-label="Facebook"]')
+        document.querySelector('[role="main"]') ||
+        document.querySelector('[aria-label="Facebook"]') ||
+        document.querySelector('[aria-label="Tu perfil"]') ||
+        document.querySelector('[aria-label="Your profile"]')
       );
     });
 
