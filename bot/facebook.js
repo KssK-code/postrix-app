@@ -70,6 +70,19 @@ export const BUNDLED_CHROME = getBundledChromiumExec();
 export const FB_ORIGIN = 'https://www.facebook.com';
 
 /**
+ * Patrón compartido para detectar el botón "unirse al grupo" → NO-MEMBRESÍA.
+ * Se pasa como argumento a page.evaluate (corre en el navegador) y se reconstruye
+ * con new RegExp(JOIN_GROUP_REGEX_SOURCE, 'i'). Detección ESTRUCTURAL: se busca el
+ * botón de unirse (role=button/link) y se reconoce su copy con este regex tolerante.
+ * 23-jun-2026: FB cambió el copy de "unirse al grupo" → "Unirte al grupo" y la
+ * detección por frase exacta dejó de matchear (el bot seguía buscando un compositor
+ * inexistente → "Compositor no encontrado" / timeout 120s). Por eso NO se depende de
+ * una frase exacta. Usado en publishInGroup (facebook.js) y groupManager.checkGroupType.
+ */
+export const JOIN_GROUP_REGEX_SOURCE =
+  'unir(te|se)\\s+(al|a\\s+este)\\s+grupo|únete\\s+al\\s+grupo|join\\s+(this\\s+)?group|solicitar\\s+unirse|request\\s+to\\s+join';
+
+/**
  * Todas las aperturas de Chromium en este módulo: siempre visibles (nunca headless: true).
  */
 function getChromiumVisibleLaunchOptions() {
@@ -232,16 +245,15 @@ async function humanTypeText(page, text) {
  * Abre el compositor de publicación con varios fallbacks (selectores, texto visible, área superior, coordenadas).
  */
 async function tryClickComposer(page) {
-  // MÉTODO 1 — Selectores directos conocidos
+  // MÉTODO 1 — Selectores directos VIVOS (verificados en diagnóstico DOM
+  // 23-jun-2026: el compositor del feed es div[role="button"] con texto visible
+  // "Escribe algo..."). Se quitaron los muertos [aria-placeholder="..."],
+  // [data-testid="status-attachment-mentions-input"] y [aria-label="Crear una
+  // publicación"] (ya no existen en el feed; daban falsa robustez igual que
+  // feed/LeftRail). Los Métodos 2-4 cubren por texto visible y posición.
   const directSelectors = [
     'div[role="button"]:has-text("Escribe algo")',
     'div[role="button"]:has-text("Write something")',
-    '[aria-label="Crear una publicación"]',
-    '[aria-label="Create a post"]',
-    '[aria-placeholder="Escribe algo..."]',
-    '[aria-placeholder="Write something..."]',
-    '[aria-placeholder="¿Qué estás pensando?"]',
-    '[data-testid="status-attachment-mentions-input"]',
   ];
 
   for (const sel of directSelectors) {
@@ -1128,7 +1140,7 @@ export async function publishInGroup(page, groupId, content) {
   // Detecta el estado de membresía antes de buscar el compositor.
   // Orden de precedencia: questions_required > pending_approval > not_member.
   // Devuelve la frase coincidente para logging estructurado.
-  const membershipDetect = await page.evaluate(() => {
+  const membershipDetect = await page.evaluate((joinReSrc) => {
     const bodyText = (document.body.innerText || '').toLowerCase();
     const find = (phrases) => phrases.find((p) => bodyText.includes(p)) || null;
 
@@ -1161,19 +1173,26 @@ export async function publishInGroup(page, groupId, content) {
     ]);
     if (pendingMatch) return { state: 'pending_approval', matched: pendingMatch };
 
-    // No es miembro y aún no ha pedido entrar
-    const notMemberMatch = find([
-      'unirse al grupo',
-      'join group',
-      'join this group',
-      'únete al grupo',
-      'solicitar unirse',
-      'request to join',
-    ]);
-    if (notMemberMatch) return { state: 'not_member', matched: notMemberMatch };
+    // NO-MEMBRESÍA — detección ESTRUCTURAL (ver JOIN_GROUP_REGEX_SOURCE arriba):
+    // botón de unirse por estructura (role=button/link) + regex tolerante de copy.
+    // La ausencia de compositor NO sirve como señal (los grupos públicos muestran
+    // compositor a no-miembros); el botón de unirse sí está siempre.
+    const JOIN_RE = new RegExp(joinReSrc, 'i');
+    const joinEl = [
+      ...document.querySelectorAll('[role="button"], a[role="link"], a[href*="/groups/"], button'),
+    ].find((el) => {
+      const al = el.getAttribute('aria-label') || '';
+      const t = (el.innerText || '').trim();
+      return JOIN_RE.test(al) || JOIN_RE.test(t);
+    });
+    if (joinEl) {
+      const al = joinEl.getAttribute('aria-label') || '';
+      const t = (joinEl.innerText || '').trim();
+      return { state: 'not_member', matched: (al || t).slice(0, 80) };
+    }
 
     return { state: 'member' };
-  });
+  }, JOIN_GROUP_REGEX_SOURCE);
 
   if (membershipDetect.state === 'questions_required') {
     writeLog('WARN', '[FB] publishInGroup: grupo requiere responder preguntas para unirse', {

@@ -8,12 +8,19 @@ import {
   searchInMyGroups,
   launchVisibleBrowser,
   FB_ORIGIN,
+  JOIN_GROUP_REGEX_SOURCE,
 } from './facebook.js';
 
 const MAX_GROUPS = 80;
 
-/** Tiempo máximo por grupo al verificar tipo; si se supera, se asume compatible (no bloquear). */
-const VERIFY_GROUP_TIMEOUT_MS = 10_000;
+/**
+ * Tiempo máximo por grupo al verificar tipo; si se supera, se asume compatible (no bloquear).
+ * Atado al wait interno de checkGroupType: ese espera ~5.5s tras el goto para que renderice el
+ * botón "Unirte al grupo" (detección de no-membresía). Con goto lento, goto + 5.5s + evaluate se
+ * acerca a 10s → caería a _timeout y la detección de membresía nunca correría. 15s deja margen.
+ * NO bajar este timeout sin bajar también el sleep(5500) de checkGroupType (van juntos).
+ */
+const VERIFY_GROUP_TIMEOUT_MS = 15_000;
 
 /** Páginas en paralelo para visitar grupos (balance velocidad / memoria). */
 const VERIFY_CONCURRENCY = 4;
@@ -38,9 +45,12 @@ export async function checkGroupType(page, groupId) {
       waitUntil: 'domcontentloaded',
       timeout: 15_000,
     });
-    await sleep(2000);
+    // ~5.5s (igual que el wait de publishInGroup): el botón "Unirte al grupo"
+    // recién renderiza a ~5-8s; con 2s la detección estructural de no-membresía
+    // nunca lo veía → falso 'member'. (23-jun-2026)
+    await sleep(5500);
 
-    const result = await page.evaluate(() => {
+    const result = await page.evaluate((joinReSrc) => {
       const tabs = Array.from(document.querySelectorAll('[role="tab"], nav a'));
       const tabTexts = tabs.map((t) => (t.innerText || '').toLowerCase().trim());
 
@@ -61,12 +71,24 @@ export async function checkGroupType(page, groupId) {
           t.includes('buy and sell')
       );
 
-      const hasComposer = !!document.querySelector(
-        '[aria-placeholder*="Escribe"],' +
-          '[aria-placeholder*="Write"],' +
-          '[aria-label*="Crear una publicación"],' +
-          '[aria-label*="Create a post"]'
-      );
+      // Compositor por marcadores VIVOS (23-jun-2026): el compositor del feed es
+      // div[role="button"] con texto "Escribe algo..." (los [aria-placeholder*=]
+      // y [aria-label*="Crear una publicación"] murieron, igual que feed/LeftRail).
+      // querySelector no soporta :has-text, así que se detecta por estructura
+      // (contenteditable/textbox) o por el texto del botón compositor.
+      const composerPhrases = [
+        'escribe algo',
+        'crea una publicación',
+        'crear publicación',
+        'write something',
+        "what's on your mind",
+      ];
+      const hasComposer =
+        !!document.querySelector('[contenteditable="true"], [role="textbox"]') ||
+        [...document.querySelectorAll('div[role="button"], div[tabindex="0"], span[role="button"]')].some((el) => {
+          const t = (el.innerText || '').toLowerCase();
+          return composerPhrases.some((p) => t.includes(p));
+        });
 
       // Membresía: mismo orden de precedencia que en publishInGroup
       const bodyText = (document.body.innerText || '').toLowerCase();
@@ -97,14 +119,21 @@ export async function checkGroupType(page, groupId) {
         'cancel request',
       ]);
 
-      const notMemberMatch = find([
-        'unirse al grupo',
-        'join group',
-        'join this group',
-        'únete al grupo',
-        'solicitar unirse',
-        'request to join',
-      ]);
+      // NO-MEMBRESÍA — detección ESTRUCTURAL (ver JOIN_GROUP_REGEX_SOURCE en
+      // facebook.js): botón de unirse por estructura (role=button/link) + regex
+      // tolerante de copy. El 23-jun-2026 el copy "unirse"→"Unirte" rompió la
+      // detección por frase exacta; no depender de texto exacto.
+      const JOIN_RE = new RegExp(joinReSrc, 'i');
+      const joinEl = [
+        ...document.querySelectorAll('[role="button"], a[role="link"], a[href*="/groups/"], button'),
+      ].find((el) => {
+        const al = el.getAttribute('aria-label') || '';
+        const t = (el.innerText || '').trim();
+        return JOIN_RE.test(al) || JOIN_RE.test(t);
+      });
+      const notMemberMatch = joinEl
+        ? (joinEl.getAttribute('aria-label') || joinEl.innerText || '').trim().slice(0, 80)
+        : null;
 
       let membershipState = 'member';
       let matchedPhrase = null;
@@ -125,7 +154,7 @@ export async function checkGroupType(page, groupId) {
         membershipState,
         matchedPhrase,
       };
-    });
+    }, JOIN_GROUP_REGEX_SOURCE);
 
     return result;
   } catch (e) {
